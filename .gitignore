@@ -1,0 +1,32 @@
+# Variables de entorno (IMPORTANTE: Protege tu API key)
+.env
+.env.local
+.env.*.local
+
+# Configuración con credenciales
+config.json
+
+# Node modules
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archivos temporales
+*.tmp
+temp/

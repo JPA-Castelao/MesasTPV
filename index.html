@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>☕Gestión de Mesas</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<!-- Pantalla de Login -->
+<div id="login-screen" class="login-screen">
+    <div class="login-container">
+        <div class="login-header">
+            <img class="login-logo" src="/img/Trigal_login.png" alt="Logo">
+            <h1>Cafetería El Trigal</h1>
+        </div>
+
+        <!-- Paso 1: Seleccionar empleado -->
+        <div id="login-step-1" class="login-step">
+            <h2>Selecciona tu usuario</h2>
+            <div id="empleados-grid" class="empleados-grid">
+                <!-- Se cargan dinámicamente -->
+            </div>
+        </div>
+
+        <!-- Paso 2: Introducir PIN -->
+        <div id="login-step-2" class="login-step hidden">
+            <button id="btn-volver" class="btn-volver">← Volver</button>
+            <div class="pin-container">
+                <div class="empleado-seleccionado">
+                    <span class="empleado-avatar" id="avatar-seleccionado"></span>
+                    <span class="empleado-nombre" id="nombre-seleccionado"></span>
+                </div>
+                <h2>Introduce tu PIN</h2>
+                <div class="pin-display">
+                    <span class="pin-dot"></span>
+                    <span class="pin-dot"></span>
+                    <span class="pin-dot"></span>
+                    <span class="pin-dot"></span>
+                </div>
+                <p id="pin-error" class="pin-error hidden">PIN incorrecto</p>
+                <div class="pin-pad">
+                    <button class="pin-btn" data-num="1">1</button>
+                    <button class="pin-btn" data-num="2">2</button>
+                    <button class="pin-btn" data-num="3">3</button>
+                    <button class="pin-btn" data-num="4">4</button>
+                    <button class="pin-btn" data-num="5">5</button>
+                    <button class="pin-btn" data-num="6">6</button>
+                    <button class="pin-btn" data-num="7">7</button>
+                    <button class="pin-btn" data-num="8">8</button>
+                    <button class="pin-btn" data-num="9">9</button>
+                    <button class="pin-btn pin-btn-clear" data-action="clear">⌫</button>
+                    <button class="pin-btn" data-num="0">0</button>
+                    <button class="pin-btn pin-btn-enter" data-action="enter">✓</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="cafe-header">
+            <div class="header-brand">
+                <span class="brand-icon">☕</span>
+                <h1>Cafeteria El Trigal</h1>
+            </div>
+            <div class="header-controls">
+                <button id="toggle-fullscreen" class="btn btn-icon-only" title="Pantalla completa">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                    </svg>
+                </button>
+                <!-- <button id="toggle-edit" class="btn btn-edit">
+                    <span class="edit-icon">✏️</span>
+                    <span class="edit-text">Editar</span>
+                </button>
+                -->
+            </div>
+        </header>
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+            <div class="stat-item stat-libre">
+                <span class="stat-dot"></span>
+                <span class="stat-count" id="count-libres">0</span>
+                <span class="stat-label">Libres</span>
+            </div>
+            <div class="stat-item stat-ocupada">
+                <span class="stat-dot"></span>
+                <span class="stat-count" id="count-ocupadas">0</span>
+                <span class="stat-label">Ocupadas</span>
+            </div>
+            <div class="stat-item stat-total">
+                <span class="stat-icon">💰</span>
+                <span class="stat-count" id="total-ventas">0.00€</span>
+                <span class="stat-label">En mesas</span>
+            </div>
+        </div>
+
+        <!-- Controls Bar -->
+        <div class="controls-bar">
+            <div class="filter-buttons">
+                <button class="filter-btn active" data-filter="all">Todas</button>
+                <button class="filter-btn" data-filter="libre">Libres</button>
+                <button class="filter-btn" data-filter="ocupada">Ocupadas</button>
+            </div>
+            <div class="view-toggle">
+                <button class="view-btn active" data-view="grid" title="Vista Grid">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="3" y="3" width="7" height="7" rx="1" />
+                        <rect x="14" y="3" width="7" height="7" rx="1" />
+                        <rect x="3" y="14" width="7" height="7" rx="1" />
+                        <rect x="14" y="14" width="7" height="7" rx="1" />
+                    </svg>
+                </button>
+                <button class="view-btn" data-view="list" title="Vista Lista">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="3" y="4" width="18" height="4" rx="1" />
+                        <rect x="3" y="10" width="18" height="4" rx="1" />
+                        <rect x="3" y="16" width="18" height="4" rx="1" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div id="mesas-container" class="mesas-grid">
+                <!-- Mesas se generan dinámicamente -->
+            </div>
+            <div id="add-mesa" class="add-mesa hidden">
+                <button class="btn btn-add">
+                    <span>+</span> Añadir Mesa
+                </button>
+            </div>
+        </main>
+
+        <!-- Modal Mesa -->
+        <div id="modal-mesa" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="modal-mesa-info">
+                        <span class="modal-mesa-icon">☕</span>
+                        <h2>Mesa <span id="numero-mesa"></span></h2>
+                    </div>
+                    <button class="close" aria-label="Cerrar">&times;</button>
+                </div>
+                <div class="productos-container">
+                    <div class="productos-lista">
+                        <h3>📋 Productos</h3>
+                        <div id="productos-disponibles" class="productos-disponibles">
+                            <!-- Productos se cargan dinámicamente -->
+                        </div>
+                    </div>
+                    <div class="pedido-actual">
+                        <div class="pedido-header">
+                            <h3>🛒 Pedido Actual</h3>
+                            <button id="toggle-pedido" class="btn-toggle-pedido" title="Ver ticket completo">
+                                <span class="badge-items" id="badge-items">0</span>
+                                <span class="toggle-icon">👁️</span>
+                            </button>
+                        </div>
+                        <div id="ultimo-item-container" class="ultimo-item-container">
+                            <!-- Último item agregado -->
+                        </div>
+                        <div id="items-pedido" class="items-pedido-collapsed">
+                            <!-- Items del pedido -->
+                        </div>
+                        <div class="total">
+                            <p>Total: <span id="total-pedido">0.00</span>€</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Ticket Completo -->
+        <div id="modal-ticket" class="modal modal-ticket">
+            <div class="modal-content modal-ticket-content">
+                <div class="modal-header">
+                    <div class="modal-mesa-info">
+                        <span class="modal-mesa-icon">🎫</span>
+                        <h2>Ticket - Mesa <span id="ticket-numero-mesa"></span></h2>
+                    </div>
+                    <button class="close close-ticket" aria-label="Cerrar">&times;</button>
+                </div>
+                <div class="ticket-items-container">
+                    <div id="ticket-items-lista">
+                        <!-- Items del ticket -->
+                    </div>
+                </div>
+                <div class="ticket-footer">
+                    <div class="ticket-total">
+                        <p>Total: <span id="ticket-total">0.00</span>€</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="js/app.js"></script>
+</body>
+
+</html>

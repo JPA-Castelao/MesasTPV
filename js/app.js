@@ -435,6 +435,14 @@ function abrirModalTicket() {
 
     // Mostrar modal
     modalTicket.style.display = 'block';
+
+    // Hacer scroll automático al final para mostrar el último artículo insertado
+    const ticketItemsContainer = modalTicket.querySelector('.ticket-items-container');
+    if (ticketItemsContainer) {
+        setTimeout(() => {
+            ticketItemsContainer.scrollTop = ticketItemsContainer.scrollHeight;
+        }, 100);
+    }
 }
 
 function cerrarModalTicket() {

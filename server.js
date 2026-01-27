@@ -263,6 +263,7 @@ app.get('/api/mesas/:idCliente/items', async (req, res) => {
                 LEFT JOIN pers_OrdenArticulosTPV a ON tl.IdArticulo = a.iDaRTICULO AND a.IDCAJA = ${TPV_CONFIG.IdCaja}
                 WHERE t.IdCliente = @IdCliente
                   AND t.IdTicket = (SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC)
+                ORDER BY tl.IdLinea ASC
             `);
 
         console.log('Items obtenidos desde BD:', result.recordset.length);

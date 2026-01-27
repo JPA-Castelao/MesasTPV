@@ -1938,6 +1938,8 @@ body {
     overflow-y: auto;
     padding: 1.5rem;
     background: var(--cafe-light);
+    max-height: 400px;
+    min-height: 400px;
 }
 
 .ticket-items-container::-webkit-scrollbar {

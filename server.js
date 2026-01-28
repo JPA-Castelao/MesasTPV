@@ -3,6 +3,8 @@ const sql = require('mssql');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+const http = require('http');
 const WebSocket = require('ws');
 
 const app = express();
@@ -649,15 +651,61 @@ app.get('/', (req, res) => {
 });
 
 // =============================================
-// INICIAR SERVIDOR HTTP + WEBSOCKET
+// INICIAR SERVIDOR HTTPS/HTTP + WEBSOCKET
 // =============================================
 
-const server = app.listen(port, () => {
-    console.log(`🚀 Servidor corriendo en http://localhost:${port}`);
-    getConnection()
-        .then(() => console.log('✅ Conexión a la base de datos establecida correctamente'))
-        .catch(err => console.error('❌ Error al conectar con la base de datos:', err));
-});
+const HOST = '0.0.0.0'; // Esto permite conexiones externas
+
+// Intentar cargar certificados SSL
+let server;
+const sslKeyPath = path.join(__dirname, 'ssl', 'server.key');
+const sslCertPath = path.join(__dirname, 'ssl', 'server.cert');
+const sslPfxPath = path.join(__dirname, 'ssl', 'server.pfx');
+
+if (fs.existsSync(sslPfxPath)) {
+    // Usar HTTPS con archivo PFX (generado por PowerShell)
+    const httpsOptions = {
+        pfx: fs.readFileSync(sslPfxPath),
+        passphrase: 'desarrollo'
+    };
+
+    server = https.createServer(httpsOptions, app);
+    server.listen(port, HOST, () => {
+        console.log(`🔐 Servidor HTTPS corriendo en https://localhost:${port}`);
+        console.log(`⚠️  Certificado autofirmado - el navegador mostrará advertencia de seguridad`);
+
+        getConnection()
+            .then(() => console.log('✅ Conexión a la base de datos establecida correctamente'))
+            .catch(err => console.error('❌ Error al conectar con la base de datos:', err));
+    });
+} else if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
+    // Usar HTTPS con archivos key/cert separados (generado por OpenSSL)
+    const httpsOptions = {
+        key: fs.readFileSync(sslKeyPath),
+        cert: fs.readFileSync(sslCertPath)
+    };
+
+    server = https.createServer(httpsOptions, app);
+    server.listen(port, HOST, () => {
+        console.log(`🔐 Servidor HTTPS corriendo en https://localhost:${port}`);
+        console.log(`⚠️  Certificado autofirmado - el navegador mostrará advertencia de seguridad`);
+
+        getConnection()
+            .then(() => console.log('✅ Conexión a la base de datos establecida correctamente'))
+            .catch(err => console.error('❌ Error al conectar con la base de datos:', err));
+    });
+} else {
+    // Fallback a HTTP si no hay certificados
+    server = http.createServer(app);
+    server.listen(port, HOST, () => {
+        console.log(`🚀 Servidor HTTP corriendo en http://localhost:${port}`);
+        console.log(`💡 Para usar HTTPS, ejecuta: .\\generate-ssl.ps1`);
+
+        getConnection()
+            .then(() => console.log('✅ Conexión a la base de datos establecida correctamente'))
+            .catch(err => console.error('❌ Error al conectar con la base de datos:', err));
+    });
+}
 
 // Iniciar WebSocket Server
 const wss = new WebSocket.Server({ server });

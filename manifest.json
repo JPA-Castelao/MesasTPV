@@ -1,0 +1,16 @@
+{
+  "short_name": "El Trigal",
+  "name": "Mesas el Trigal",
+  "icons": [
+    {
+      "src": "Trigal.png",
+      "sizes": "192x192",
+      "type": "img/png"
+    }
+  ],
+  "start_url": "/index.html",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "display": "fullscreen",
+  "orientation": "any"
+}

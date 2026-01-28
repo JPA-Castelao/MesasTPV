@@ -8,6 +8,13 @@
     <link rel="stylesheet" href="css/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="manifest" href="/manifest.json">
+
+    <link rel="icon" type="image/png" sizes="192x192" href="img/Trigal.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="img/Trigal.png">
+
+    <link rel="apple-touch-icon" href="img/Trigal_login.png">
+
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <!-- Pantalla de Login -->
@@ -85,31 +92,14 @@
             </div>
         </header>
 
-        <!-- Stats Bar -->
-        <div class="stats-bar">
-            <div class="stat-item stat-libre">
-                <span class="stat-dot"></span>
-                <span class="stat-count" id="count-libres">0</span>
-                <span class="stat-label">Libres</span>
-            </div>
-            <div class="stat-item stat-ocupada">
-                <span class="stat-dot"></span>
-                <span class="stat-count" id="count-ocupadas">0</span>
-                <span class="stat-label">Ocupadas</span>
-            </div>
-            <div class="stat-item stat-total">
-                <span class="stat-icon">💰</span>
-                <span class="stat-count" id="total-ventas">0.00€</span>
-                <span class="stat-label">En mesas</span>
-            </div>
-        </div>
-
-        <!-- Controls Bar -->
-        <div class="controls-bar">
-            <div class="filter-buttons">
-                <button class="filter-btn active" data-filter="all">Todas</button>
-                <button class="filter-btn" data-filter="libre">Libres</button>
-                <button class="filter-btn" data-filter="ocupada">Ocupadas</button>
+        <!-- Employee Info Bar -->
+        <div class="employee-bar">
+            <div class="employee-info">
+                <span class="employee-icon">👤</span>
+                <div class="employee-details">
+                    <span class="employee-label">Empleado actual:</span>
+                    <span class="employee-name" id="current-employee-name">-</span>
+                </div>
             </div>
             <div class="view-toggle">
                 <button class="view-btn active" data-view="grid" title="Vista Grid">

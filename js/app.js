@@ -238,6 +238,12 @@ async function validarPin() {
             sessionStorage.setItem('empleado', JSON.stringify(data.empleado));
             ocultarLogin();
 
+            // Activar pantalla completa
+            toggleFullScreen();
+
+            // Actualizar nombre del empleado en la UI
+            actualizarEmpleadoActual();
+
             // Iniciar la app
             await cargarProductos();
             await cargarMesas();
@@ -296,50 +302,19 @@ function configurarLoginEventos() {
 }
 
 // =============================================
-// FUNCIONES DE ESTADÍSTICAS
+// FUNCIONES DE EMPLEADO ACTUAL
 // =============================================
 
-function actualizarEstadisticas() {
-    const mesasArray = Object.values(mesas);
-    const libres = mesasArray.filter(m => !m.ocupada).length;
-    const ocupadas = mesasArray.filter(m => m.ocupada).length;
-    const totalVentas = mesasArray.reduce((sum, m) => sum + (m.total || 0), 0);
-
-    document.getElementById('count-libres').textContent = libres;
-    document.getElementById('count-ocupadas').textContent = ocupadas;
-    document.getElementById('total-ventas').textContent = totalVentas.toFixed(2) + '€';
+function actualizarEmpleadoActual() {
+    const employeeNameElement = document.getElementById('current-employee-name');
+    if (employeeNameElement && empleadoActual) {
+        employeeNameElement.textContent = empleadoActual.nombre || empleadoActual.Nombre || '-';
+    }
 }
 
 // =============================================
-// FUNCIONES DE FILTRO Y VISTA
+// FUNCIONES DE VISTA
 // =============================================
-
-function configurarFiltros() {
-    const filterBtns = document.querySelectorAll('.filter-btn');
-    filterBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            filterBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            filtroActual = btn.dataset.filter;
-            aplicarFiltro();
-        });
-    });
-}
-
-function aplicarFiltro() {
-    const mesasElements = document.querySelectorAll('.mesa');
-    mesasElements.forEach(mesaEl => {
-        const idCliente = parseInt(mesaEl.dataset.idCliente);
-        const mesa = mesas[idCliente];
-        const ocupada = mesa?.ocupada;
-
-        let mostrar = true;
-        if (filtroActual === 'libre' && ocupada) mostrar = false;
-        if (filtroActual === 'ocupada' && !ocupada) mostrar = false;
-
-        mesaEl.classList.toggle('filtered-out', !mostrar);
-    });
-}
 
 function configurarVistas() {
     const viewBtns = document.querySelectorAll('.view-btn');
@@ -435,14 +410,6 @@ function abrirModalTicket() {
 
     // Mostrar modal
     modalTicket.style.display = 'block';
-
-    // Hacer scroll automático al final para mostrar el último artículo insertado
-    const ticketItemsContainer = modalTicket.querySelector('.ticket-items-container');
-    if (ticketItemsContainer) {
-        setTimeout(() => {
-            ticketItemsContainer.scrollTop = ticketItemsContainer.scrollHeight;
-        }, 100);
-    }
 }
 
 function cerrarModalTicket() {
@@ -541,9 +508,6 @@ async function cargarMesas() {
         Object.keys(mesasEnUso).forEach(idCliente => {
             actualizarEstadoMesaEnUso(idCliente);
         });
-
-        actualizarEstadisticas();
-        aplicarFiltro();
     } catch (error) {
         console.error('Error al cargar mesas:', error);
         alert('Error al cargar las mesas. Verifica la conexión con el servidor.');
@@ -580,6 +544,7 @@ async function init() {
     const tieneSesion = await verificarSesion();
 
     if (tieneSesion) {
+        actualizarEmpleadoActual();
         await cargarProductos();
         await cargarMesas();
         await cargarMesasEnUso();
@@ -599,7 +564,6 @@ async function init() {
         }
     });
 
-    configurarFiltros();
     configurarVistas();
     configurarTogglePedido();
 
@@ -838,7 +802,6 @@ async function abrirMesa(idCliente) {
 
         mostrarProductos();
         actualizarItemsPedido();
-        actualizarEstadisticas();
 
         modalMesa.style.display = 'block';
     } catch (error) {
@@ -937,7 +900,6 @@ async function agregarProducto(producto) {
 
         actualizarItemsPedido();
         actualizarMesaElement(mesaActual);
-        actualizarEstadisticas();
 
     } catch (error) {
         console.error('Error al agregar producto:', error);
@@ -1065,7 +1027,6 @@ async function eliminarItem(productoId) {
 
         actualizarItemsPedido();
         actualizarMesaElement(mesaActual);
-        actualizarEstadisticas();
 
     } catch (error) {
         console.error('Error al eliminar item:', error);
@@ -1107,7 +1068,6 @@ async function crearTicket() {
             mesa.horaApertura = null;
 
             actualizarMesaElement(mesaActual);
-            actualizarEstadisticas();
             cerrarModal();
         } else {
             alert('❌ Error al crear el ticket: ' + (data.error || 'Error desconocido'));
@@ -1141,7 +1101,6 @@ async function limpiarMesa() {
         mesa.horaApertura = null;
 
         actualizarMesaElement(mesaActual);
-        actualizarEstadisticas();
         cerrarModal();
 
     } catch (error) {

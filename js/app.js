@@ -149,10 +149,29 @@ function ocultarLogin() {
 
 async function cargarEmpleados() {
     try {
-        const response = await fetch(`${API_BASE}/empleados`);
-        if (!response.ok) throw new Error('Error al cargar empleados');
+        // Intentar cargar desde caché primero
+        const cacheKey = 'empleados_cache';
+        const cacheTTL = 60 * 60 * 1000; // 1 hora
+        const cached = localStorage.getItem(cacheKey);
+        const cacheTime = localStorage.getItem(cacheKey + '_time');
 
-        const empleados = await response.json();
+        let empleados;
+
+        if (cached && cacheTime && (Date.now() - parseInt(cacheTime)) < cacheTTL) {
+            console.log('✅ Usando empleados desde caché');
+            empleados = JSON.parse(cached);
+        } else {
+            console.log('⬇️ Descargando empleados desde servidor');
+            const response = await fetch(`${API_BASE}/empleados`);
+            if (!response.ok) throw new Error('Error al cargar empleados');
+
+            empleados = await response.json();
+
+            // Guardar en caché
+            localStorage.setItem(cacheKey, JSON.stringify(empleados));
+            localStorage.setItem(cacheKey + '_time', Date.now().toString());
+        }
+
         const grid = document.getElementById('empleados-grid');
         grid.innerHTML = '';
 
@@ -364,52 +383,65 @@ function configurarTogglePedido() {
     });
 }
 
-function abrirModalTicket() {
+async function abrirModalTicket() {
     if (!mesaActual) return;
 
-    const mesa = mesas[mesaActual];
-    const modalTicket = document.getElementById('modal-ticket');
-    const ticketNumeroMesa = document.getElementById('ticket-numero-mesa');
-    const ticketItemsLista = document.getElementById('ticket-items-lista');
-    const ticketTotal = document.getElementById('ticket-total');
+    try {
+        // Recargar items desde la BD para asegurar que estén actualizados
+        const itemsResponse = await fetch(`${API_BASE}/mesas/${mesaActual}/items`);
+        const items = await itemsResponse.json();
 
-    // Actualizar título
-    ticketNumeroMesa.textContent = mesa.nombre;
+        // Actualizar el estado local con los items más recientes
+        const mesa = mesas[mesaActual];
+        mesa.items = items;
+        mesa.total = items.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
 
-    // Limpiar y renderizar items
-    ticketItemsLista.innerHTML = '';
-    let total = 0;
+        const modalTicket = document.getElementById('modal-ticket');
+        const ticketNumeroMesa = document.getElementById('ticket-numero-mesa');
+        const ticketItemsLista = document.getElementById('ticket-items-lista');
+        const ticketTotal = document.getElementById('ticket-total');
 
-    mesa.items.forEach((item) => {
-        const subtotal = item.precio * item.cantidad;
-        total += subtotal;
+        // Actualizar título
+        ticketNumeroMesa.textContent = mesa.nombre;
 
-        const itemElement = document.createElement('div');
-        itemElement.className = 'item-pedido';
-        itemElement.innerHTML = `
-            <div class="item-info">
-                <span class="item-nombre">${item.nombre}</span>
-                <span class="item-cantidad">x${item.cantidad}</span>
-            </div>
-            <div class="item-precios">
-                <span class="item-subtotal">${subtotal.toFixed(2)}€</span>
-                <button class="btn btn-eliminar" data-id="${item.id}">Eliminar</button>
-            </div>
-        `;
+        // Limpiar y renderizar items
+        ticketItemsLista.innerHTML = '';
+        let total = 0;
 
-        itemElement.querySelector('.btn-eliminar').addEventListener('click', async () => {
-            await eliminarItem(item.id);
-            // Actualizar el modal después de eliminar
-            abrirModalTicket();
+        mesa.items.forEach((item) => {
+            const subtotal = item.precio * item.cantidad;
+            total += subtotal;
+
+            const itemElement = document.createElement('div');
+            itemElement.className = 'item-pedido';
+            itemElement.innerHTML = `
+                <div class="item-info">
+                    <span class="item-nombre">${item.nombre}</span>
+                    <span class="item-cantidad">x${item.cantidad}</span>
+                </div>
+                <div class="item-precios">
+                    <span class="item-subtotal">${subtotal.toFixed(2)}€</span>
+                    <button class="btn btn-eliminar" data-id="${item.id}">Eliminar</button>
+                </div>
+            `;
+
+            itemElement.querySelector('.btn-eliminar').addEventListener('click', async () => {
+                await eliminarItem(item.id);
+                // Actualizar el modal después de eliminar
+                abrirModalTicket();
+            });
+
+            ticketItemsLista.appendChild(itemElement);
         });
 
-        ticketItemsLista.appendChild(itemElement);
-    });
+        ticketTotal.textContent = total.toFixed(2);
 
-    ticketTotal.textContent = total.toFixed(2);
-
-    // Mostrar modal
-    modalTicket.style.display = 'block';
+        // Mostrar modal
+        modalTicket.style.display = 'block';
+    } catch (error) {
+        console.error('Error al abrir modal del ticket:', error);
+        alert('Error al cargar el ticket');
+    }
 }
 
 function cerrarModalTicket() {
@@ -516,7 +548,19 @@ async function cargarMesas() {
 
 async function cargarProductos() {
     try {
-        console.log('Cargando productos...');
+        // Intentar cargar desde caché primero
+        const cacheKey = 'productos_cache';
+        const cacheTTL = 60 * 60 * 1000; // 1 hora
+        const cached = localStorage.getItem(cacheKey);
+        const cacheTime = localStorage.getItem(cacheKey + '_time');
+
+        if (cached && cacheTime && (Date.now() - parseInt(cacheTime)) < cacheTTL) {
+            console.log('✅ Usando productos desde caché');
+            productos = JSON.parse(cached);
+            return;
+        }
+
+        console.log('⬇️ Descargando productos desde servidor...');
         const response = await fetch(`${API_BASE}/articulos`);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
@@ -529,8 +573,56 @@ async function cargarProductos() {
             precio: parseFloat(item.PRECIO) || 0,
             categoria: item.DESCRIPFAMILIA
         }));
+
+        // Guardar en caché
+        localStorage.setItem(cacheKey, JSON.stringify(productos));
+        localStorage.setItem(cacheKey + '_time', Date.now().toString());
     } catch (error) {
         console.error('Error al cargar productos:', error);
+    }
+}
+
+// =============================================
+// CERRAR SESIÓN Y LIMPIAR CACHÉ
+// =============================================
+
+async function cerrarSesionYLimpiarCache() {
+    try {
+        console.log('🚪 Cerrando sesión...');
+
+        // NO cerrar la mesa - solo cerrar el modal visual si está abierto
+        if (modalMesa && modalMesa.style.display === 'block') {
+            modalMesa.style.display = 'none';
+        }
+
+        // Limpiar caché de localStorage
+        localStorage.removeItem('productos_cache');
+        localStorage.removeItem('productos_cache_time');
+        localStorage.removeItem('empleados_cache');
+        localStorage.removeItem('empleados_cache_time');
+
+        // Cerrar sesión del empleado
+        sessionStorage.removeItem('empleado');
+        empleadoActual = null;
+
+        // Desconectar WebSocket
+        if (ws) {
+            ws.close();
+        }
+
+        // Resetear estado local (las mesas en la BD quedan intactas)
+        mesaActual = null;
+        productos = [];
+        mesas = {};
+
+        // Mostrar pantalla de login
+        mostrarLogin();
+
+        console.log('✅ Sesión cerrada - mesas intactas en BD');
+
+    } catch (error) {
+        console.error('Error al cerrar sesión:', error);
+        alert('Error al cerrar sesión');
     }
 }
 
@@ -558,6 +650,9 @@ async function init() {
     const toggleFullscreenBtn = document.getElementById('toggle-fullscreen');
     if (toggleFullscreenBtn) toggleFullscreenBtn.addEventListener('click', toggleFullScreen);
 
+    const refreshCacheBtn = document.getElementById('refresh-cache');
+    if (refreshCacheBtn) refreshCacheBtn.addEventListener('click', cerrarSesionYLimpiarCache);
+
     window.addEventListener('click', (e) => {
         if (e.target === modalMesa) {
             cerrarModal();
@@ -567,12 +662,7 @@ async function init() {
     configurarVistas();
     configurarTogglePedido();
 
-    // Polling de respaldo (cada 30s por si falla WebSocket)
-    setInterval(async () => {
-        if (empleadoActual && !mesaActual && modalMesa.style.display !== 'block') {
-            await cargarMesas();
-        }
-    }, 30000);
+    // WebSocket ya maneja las actualizaciones en tiempo real, no necesitamos polling
 }
 
 // =============================================
@@ -887,7 +977,7 @@ async function agregarProducto(producto) {
         }
 
         const data = await response.json();
-        console.log('Producto agregado en servidor. Respuesta:', data);
+        console.log('Producto agregado en servidor. Total:', data.total);
 
         // Recargar items desde la BD para mantener sincronía
         const itemsResponse = await fetch(`${API_BASE}/mesas/${mesaActual}/items`);

@@ -6,6 +6,7 @@ const fs = require('fs');
 const https = require('https');
 const http = require('http');
 const WebSocket = require('ws');
+const compression = require('compression');
 
 const app = express();
 const mesasEnUso = new Map();
@@ -23,9 +24,15 @@ try {
 const port = config.server.port;
 
 // Middleware
+app.use(compression()); // Compresión GZIP
 app.use(cors());
 app.use(express.json());
-app.use(express.static('.'));
+
+// Servir archivos estáticos con caché
+app.use(express.static('.', {
+    maxAge: '1h', // Cachear archivos estáticos por 1 hora
+    etag: true
+}));
 
 // Configuración de la base de datos (desde config.json)
 const dbConfig = config.database;
@@ -178,19 +185,26 @@ app.get('/api/mesas', async (req, res) => {
         const pool = await getConnection();
         console.log('Obteniendo mesas desde Clientes_Datos...');
 
-        // Query que obtiene mesas y sus tickets abiertos (con líneas)
+        // Query optimizada: usa una sola subconsulta en lugar de dos por fila
         const result = await pool.request().query(`
             SELECT 
                 c.IdCliente,
                 c.cliente as nombre,
-                t.IdTicket,
-                (SELECT COUNT(*) FROM Tickets_Lineas tl WHERE tl.IdTicket = t.IdTicket) as numItems,
-                (SELECT ISNULL(SUM(tl.Total), 0) FROM Tickets_Lineas tl WHERE tl.IdTicket = t.IdTicket) as totalTicket
+                ticket_data.IdTicket,
+                ticket_data.numItems,
+                ticket_data.totalTicket
             FROM Clientes_Datos c
             LEFT JOIN (
-                SELECT IdTicket, IdCliente, ROW_NUMBER() OVER (PARTITION BY IdCliente ORDER BY Fecha DESC) as rn
-                FROM Tickets
-            ) t ON c.IdCliente = t.IdCliente AND t.rn = 1
+                SELECT 
+                    t.IdCliente,
+                    t.IdTicket,
+                    COUNT(tl.IdLinea) as numItems,
+                    ISNULL(SUM(tl.Total), 0) as totalTicket,
+                    ROW_NUMBER() OVER (PARTITION BY t.IdCliente ORDER BY t.Fecha DESC) as rn
+                FROM Tickets t
+                LEFT JOIN Tickets_Lineas tl ON t.IdTicket = tl.IdTicket
+                GROUP BY t.IdCliente, t.IdTicket, t.Fecha
+            ) ticket_data ON c.IdCliente = ticket_data.IdCliente AND ticket_data.rn = 1
             WHERE c.padre = '0002'
               AND LOWER(c.cliente) NOT LIKE 'salon%'
             ORDER BY c.IdCliente
@@ -207,6 +221,9 @@ app.get('/api/mesas', async (req, res) => {
         }));
 
         console.log('Mesas obtenidas:', mesas.length);
+
+        // Añadir headers de caché para evitar peticiones innecesarias
+        res.set('Cache-Control', 'private, max-age=10'); // 10 segundos de caché
         res.json(mesas);
     } catch (err) {
         console.error('Error al obtener mesas:', err);

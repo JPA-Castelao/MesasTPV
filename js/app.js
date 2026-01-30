@@ -116,7 +116,7 @@ function actualizarEstadoMesaEnUso(idCliente) {
         // Restaurar estado original
         const mesa = mesas[idCliente];
         if (mesa) {
-            mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? 'Ocupada' : 'Libre';
+            mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? '' : 'Libre';
         }
     }
 }
@@ -583,7 +583,41 @@ async function cargarProductos() {
 }
 
 // =============================================
-// CERRAR SESIÓN Y LIMPIAR CACHÉ
+// REFRESCAR MESAS MANUALMENTE
+// =============================================
+
+async function refrescarMesas() {
+    try {
+        console.log('🔄 Refrescando mesas...');
+
+        await cargarMesas();
+
+        console.log('✅ Mesas actualizadas');
+
+        // Feedback visual al usuario
+        const btn = document.getElementById('refresh-mesas');
+        if (btn) {
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M20 6L9 17l-5-5"/>
+                </svg>
+            `;
+            btn.style.color = '#4CAF50';
+
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.style.color = '';
+            }, 1500);
+        }
+
+    } catch (error) {
+        console.error('Error al refrescar mesas:', error);
+    }
+}
+
+// =============================================
+// CERRAR SESIÓN Y LIMPIAR CACHÉ 
 // =============================================
 
 async function cerrarSesionYLimpiarCache() {
@@ -662,7 +696,20 @@ async function init() {
     configurarVistas();
     configurarTogglePedido();
 
-    // WebSocket ya maneja las actualizaciones en tiempo real, no necesitamos polling
+    // Botón de refresh manual de mesas
+    const refreshMesasBtn = document.getElementById('refresh-mesas');
+    if (refreshMesasBtn) refreshMesasBtn.addEventListener('click', refrescarMesas);
+
+    // Polling automático cada 10 segundos para detectar cambios externos
+    if (tieneSesion) {
+        setInterval(async () => {
+            // Solo recargar si no hay una mesa abierta (para no interrumpir al usuario)
+            if (!mesaActual && modalMesa.style.display !== 'block') {
+                await cargarMesas();
+                console.log('🔄 Mesas actualizadas automáticamente');
+            }
+        }, 10000); // 10 segundos
+    }
 }
 
 // =============================================
@@ -682,7 +729,7 @@ function crearMesaElement(idCliente) {
         <span class="mesa-icon">${ocupada ? '☕' : '🪑'}</span>
         <div class="mesa-info">
             <div class="mesa-numero">${mesa.nombre}</div>
-            <div class="mesa-estado">${ocupada ? 'Ocupada' : 'Libre'}</div>
+            <div class="mesa-estado">${ocupada ? '' : 'Libre'}</div>
         </div>
         ${ocupada && total > 0 ? `<div class="mesa-total">${total.toFixed(2)}€</div>` : ''}
     `;
@@ -787,7 +834,7 @@ function actualizarMesaElement(idCliente) {
 
         mesaElement.classList.toggle('ocupada', mesa.ocupada);
         mesaElement.querySelector('.mesa-icon').textContent = mesa.ocupada ? '☕' : '🪑';
-        mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? 'Ocupada' : 'Libre';
+        mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? '' : 'Libre';
 
         let totalEl = mesaElement.querySelector('.mesa-total');
         if (mesa.ocupada && mesa.total > 0) {
@@ -893,6 +940,8 @@ async function abrirMesa(idCliente) {
         mostrarProductos();
         actualizarItemsPedido();
 
+        // CRÍTICO: Bloquear scroll del body para prevenir que el grid se redimensione
+        document.body.classList.add('modal-open');
         modalMesa.style.display = 'block';
     } catch (error) {
         console.error('Error al abrir mesa:', error);
@@ -1215,6 +1264,8 @@ function cerrarModal() {
         });
     }
 
+    // CRÍTICO: Restaurar scroll del body
+    document.body.classList.remove('modal-open');
     modalMesa.style.display = 'none';
     mesaActual = null;
 

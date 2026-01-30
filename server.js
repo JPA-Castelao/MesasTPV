@@ -385,31 +385,49 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
             .query(`SELECT IdAlmacen FROM Cajas WHERE IdCaja = @IdCaja`);
         const idAlmacen = cajaResult.recordset[0]?.IdAlmacen || 0;
 
-        // Obtener siguiente IdLinea para este ticket
-        const maxLineaResult = await pool.request()
-            .input('IdTicket', sql.Int, idTicket)
-            .query(`SELECT ISNULL(MAX(IdLinea), 0) + 1 as nextLinea FROM Tickets_Lineas WHERE IdTicket = @IdTicket`);
-        const idLinea = maxLineaResult.recordset[0].nextLinea;
+        // TRANSACCIÓN para evitar condiciones de carrera al obtener IdLinea
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
 
-        // INSERT directo en Tickets_Lineas
-        await pool.request()
-            .input('IdTicket', sql.Int, idTicket)
-            .input('IdLinea', sql.SmallInt, idLinea)
-            .input('IdArticulo', sql.VarChar(50), productoId)
-            .input('IdAlmacen', sql.SmallInt, idAlmacen)
-            .input('Cantidad', sql.Decimal(18, 6), cantidad)
-            .input('Precio', sql.Decimal(18, 6), precio)
-            .input('PorcDesc', sql.Decimal(18, 6), 0)
-            .input('Descuento', sql.Decimal(18, 6), 0)
-            .input('IdIVA', sql.SmallInt, idIva)
-            .input('Total', sql.Decimal(18, 6), total)
-            .input('Usuario', sql.VarChar(50), 'TPV')
-            .query(`
-                INSERT INTO Tickets_Lineas (IdTicket, IdLinea, IdArticulo, IdAlmacen, Cantidad, Precio, PorcDesc, Descuento, IdIVA, Total, Usuario)
-                VALUES (@IdTicket, @IdLinea, @IdArticulo, @IdAlmacen, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @Usuario)
-            `);
+        try {
+            // Obtener siguiente IdLinea con bloqueo (UPDLOCK) para evitar duplicados
+            const maxLineaResult = await transaction.request()
+                .input('IdTicket', sql.Int, idTicket)
+                .query(`
+                    SELECT ISNULL(MAX(IdLinea), 0) + 1 as nextLinea 
+                    FROM Tickets_Lineas WITH (UPDLOCK, HOLDLOCK)
+                    WHERE IdTicket = @IdTicket
+                `);
+            const idLinea = maxLineaResult.recordset[0].nextLinea;
 
-        console.log('Línea insertada:', { idTicket, productoId, precio, total });
+            // INSERT directo en Tickets_Lineas
+            await transaction.request()
+                .input('IdTicket', sql.Int, idTicket)
+                .input('IdLinea', sql.SmallInt, idLinea)
+                .input('IdArticulo', sql.VarChar(50), productoId)
+                .input('IdAlmacen', sql.SmallInt, idAlmacen)
+                .input('Cantidad', sql.Decimal(18, 6), cantidad)
+                .input('Precio', sql.Decimal(18, 6), precio)
+                .input('PorcDesc', sql.Decimal(18, 6), 0)
+                .input('Descuento', sql.Decimal(18, 6), 0)
+                .input('IdIVA', sql.SmallInt, idIva)
+                .input('Total', sql.Decimal(18, 6), total)
+                .input('Usuario', sql.VarChar(50), 'TPV')
+                .query(`
+                    INSERT INTO Tickets_Lineas (IdTicket, IdLinea, IdArticulo, IdAlmacen, Cantidad, Precio, PorcDesc, Descuento, IdIVA, Total, Usuario)
+                    VALUES (@IdTicket, @IdLinea, @IdArticulo, @IdAlmacen, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @Usuario)
+                `);
+
+            // Confirmar transacción
+            await transaction.commit();
+
+            console.log('Línea insertada:', { idTicket, idLinea, productoId, precio, total });
+
+        } catch (txErr) {
+            // Si hay error, revertir transacción
+            await transaction.rollback();
+            throw txErr;
+        }
 
         // Obtener nuevo total del ticket
         const totalResult = await pool.request()

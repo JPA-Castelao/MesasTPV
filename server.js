@@ -413,9 +413,14 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
                 .input('IdIVA', sql.SmallInt, idIva)
                 .input('Total', sql.Decimal(18, 6), total)
                 .input('Usuario', sql.VarChar(50), 'TPV')
+                .input('fechaini', sql.DateTime, null)
+                .input('fechadev', sql.DateTime, null)
+                .input('tipoalquiler', sql.SmallInt, null)
+                .input('idlinea_abono', sql.Int, null)
+                .input('idlinea_oferta', sql.Int, null)
                 .query(`
-                    INSERT INTO Tickets_Lineas (IdTicket, IdLinea, IdArticulo, IdAlmacen, Cantidad, Precio, PorcDesc, Descuento, IdIVA, Total, Usuario)
-                    VALUES (@IdTicket, @IdLinea, @IdArticulo, @IdAlmacen, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @Usuario)
+                    INSERT INTO Tickets_Lineas (IdTicket, IdLinea, IdArticulo, IdAlmacen, Cantidad, Precio, PorcDesc, Descuento, IdIVA, Total, Usuario, fechaini, fechadev, tipoalquiler, idlinea_abono, idlinea_oferta)
+                    VALUES (@IdTicket, @IdLinea, @IdArticulo, @IdAlmacen, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @Usuario, @fechaini, @fechadev, @tipoalquiler, @idlinea_abono, @idlinea_oferta)
                 `);
 
             // Confirmar transacción
@@ -595,6 +600,34 @@ app.get('/api/tickets/debug', async (req, res) => {
         // Ver un ticket existente como ejemplo
         const exampleResult = await pool.request().query(`
             SELECT TOP 1 * FROM Tickets ORDER BY IdTicket DESC
+            `);
+
+        res.json({
+            columns: columnsResult.recordset,
+            example: exampleResult.recordset[0] || null
+        });
+    } catch (err) {
+        console.error('Error debug:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Ruta temporal para debug - ver estructura de Tickets_Lineas
+app.get('/api/tickets_lineas/debug', async (req, res) => {
+    try {
+        const pool = await getConnection();
+
+        // Ver columnas de la tabla Tickets_Lineas
+        const columnsResult = await pool.request().query(`
+            SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'Tickets_Lineas'
+            ORDER BY ORDINAL_POSITION
+            `);
+
+        // Ver una línea existente como ejemplo
+        const exampleResult = await pool.request().query(`
+            SELECT TOP 1 * FROM Tickets_Lineas ORDER BY IdTicket DESC
             `);
 
         res.json({

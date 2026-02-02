@@ -6,6 +6,7 @@ const fs = require('fs');
 const https = require('https');
 const http = require('http');
 const WebSocket = require('ws');
+const compression = require('compression');
 
 const app = express();
 const mesasEnUso = new Map();
@@ -23,9 +24,15 @@ try {
 const port = config.server.port;
 
 // Middleware
+app.use(compression()); // Compresión GZIP
 app.use(cors());
 app.use(express.json());
-app.use(express.static('.'));
+
+// Servir archivos estáticos con caché
+app.use(express.static('.', {
+    maxAge: '1h', // Cachear archivos estáticos por 1 hora
+    etag: true
+}));
 
 // Configuración de la base de datos (desde config.json)
 const dbConfig = config.database;
@@ -178,19 +185,26 @@ app.get('/api/mesas', async (req, res) => {
         const pool = await getConnection();
         console.log('Obteniendo mesas desde Clientes_Datos...');
 
-        // Query que obtiene mesas y sus tickets abiertos (con líneas)
+        // Query optimizada: usa una sola subconsulta en lugar de dos por fila
         const result = await pool.request().query(`
             SELECT 
                 c.IdCliente,
                 c.cliente as nombre,
-                t.IdTicket,
-                (SELECT COUNT(*) FROM Tickets_Lineas tl WHERE tl.IdTicket = t.IdTicket) as numItems,
-                (SELECT ISNULL(SUM(tl.Total), 0) FROM Tickets_Lineas tl WHERE tl.IdTicket = t.IdTicket) as totalTicket
+                ticket_data.IdTicket,
+                ticket_data.numItems,
+                ticket_data.totalTicket
             FROM Clientes_Datos c
             LEFT JOIN (
-                SELECT IdTicket, IdCliente, ROW_NUMBER() OVER (PARTITION BY IdCliente ORDER BY Fecha DESC) as rn
-                FROM Tickets
-            ) t ON c.IdCliente = t.IdCliente AND t.rn = 1
+                SELECT 
+                    t.IdCliente,
+                    t.IdTicket,
+                    COUNT(tl.IdLinea) as numItems,
+                    ISNULL(SUM(tl.Total), 0) as totalTicket,
+                    ROW_NUMBER() OVER (PARTITION BY t.IdCliente ORDER BY t.Fecha DESC) as rn
+                FROM Tickets t
+                LEFT JOIN Tickets_Lineas tl ON t.IdTicket = tl.IdTicket
+                GROUP BY t.IdCliente, t.IdTicket, t.Fecha
+            ) ticket_data ON c.IdCliente = ticket_data.IdCliente AND ticket_data.rn = 1
             WHERE c.padre = '0002'
               AND LOWER(c.cliente) NOT LIKE 'salon%'
             ORDER BY c.IdCliente
@@ -207,6 +221,9 @@ app.get('/api/mesas', async (req, res) => {
         }));
 
         console.log('Mesas obtenidas:', mesas.length);
+
+        // Añadir headers de caché para evitar peticiones innecesarias
+        res.set('Cache-Control', 'private, max-age=10'); // 10 segundos de caché
         res.json(mesas);
     } catch (err) {
         console.error('Error al obtener mesas:', err);
@@ -368,31 +385,54 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
             .query(`SELECT IdAlmacen FROM Cajas WHERE IdCaja = @IdCaja`);
         const idAlmacen = cajaResult.recordset[0]?.IdAlmacen || 0;
 
-        // Obtener siguiente IdLinea para este ticket
-        const maxLineaResult = await pool.request()
-            .input('IdTicket', sql.Int, idTicket)
-            .query(`SELECT ISNULL(MAX(IdLinea), 0) + 1 as nextLinea FROM Tickets_Lineas WHERE IdTicket = @IdTicket`);
-        const idLinea = maxLineaResult.recordset[0].nextLinea;
+        // TRANSACCIÓN para evitar condiciones de carrera al obtener IdLinea
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
 
-        // INSERT directo en Tickets_Lineas
-        await pool.request()
-            .input('IdTicket', sql.Int, idTicket)
-            .input('IdLinea', sql.SmallInt, idLinea)
-            .input('IdArticulo', sql.VarChar(50), productoId)
-            .input('IdAlmacen', sql.SmallInt, idAlmacen)
-            .input('Cantidad', sql.Decimal(18, 6), cantidad)
-            .input('Precio', sql.Decimal(18, 6), precio)
-            .input('PorcDesc', sql.Decimal(18, 6), 0)
-            .input('Descuento', sql.Decimal(18, 6), 0)
-            .input('IdIVA', sql.SmallInt, idIva)
-            .input('Total', sql.Decimal(18, 6), total)
-            .input('Usuario', sql.VarChar(50), 'TPV')
-            .query(`
-                INSERT INTO Tickets_Lineas (IdTicket, IdLinea, IdArticulo, IdAlmacen, Cantidad, Precio, PorcDesc, Descuento, IdIVA, Total, Usuario)
-                VALUES (@IdTicket, @IdLinea, @IdArticulo, @IdAlmacen, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @Usuario)
-            `);
+        try {
+            // Obtener siguiente IdLinea con bloqueo (UPDLOCK) para evitar duplicados
+            const maxLineaResult = await transaction.request()
+                .input('IdTicket', sql.Int, idTicket)
+                .query(`
+                    SELECT ISNULL(MAX(IdLinea), 0) + 1 as nextLinea 
+                    FROM Tickets_Lineas WITH (UPDLOCK, HOLDLOCK)
+                    WHERE IdTicket = @IdTicket
+                `);
+            const idLinea = maxLineaResult.recordset[0].nextLinea;
 
-        console.log('Línea insertada:', { idTicket, productoId, precio, total });
+            // INSERT directo en Tickets_Lineas
+            await transaction.request()
+                .input('IdTicket', sql.Int, idTicket)
+                .input('IdLinea', sql.SmallInt, idLinea)
+                .input('IdArticulo', sql.VarChar(50), productoId)
+                .input('IdAlmacen', sql.SmallInt, idAlmacen)
+                .input('Cantidad', sql.Decimal(18, 6), cantidad)
+                .input('Precio', sql.Decimal(18, 6), precio)
+                .input('PorcDesc', sql.Decimal(18, 6), 0)
+                .input('Descuento', sql.Decimal(18, 6), 0)
+                .input('IdIVA', sql.SmallInt, idIva)
+                .input('Total', sql.Decimal(18, 6), total)
+                .input('Usuario', sql.VarChar(50), 'TPV')
+                .input('fechaini', sql.DateTime, null)
+                .input('fechadev', sql.DateTime, null)
+                .input('tipoalquiler', sql.SmallInt, null)
+                .input('idlinea_abono', sql.Int, null)
+                .input('idlinea_oferta', sql.Int, null)
+                .query(`
+                    INSERT INTO Tickets_Lineas (IdTicket, IdLinea, IdArticulo, IdAlmacen, Cantidad, Precio, PorcDesc, Descuento, IdIVA, Total, Usuario, fechaini, fechadev, tipoalquiler, idlinea_abono, idlinea_oferta)
+                    VALUES (@IdTicket, @IdLinea, @IdArticulo, @IdAlmacen, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @Usuario, @fechaini, @fechadev, @tipoalquiler, @idlinea_abono, @idlinea_oferta)
+                `);
+
+            // Confirmar transacción
+            await transaction.commit();
+
+            console.log('Línea insertada:', { idTicket, idLinea, productoId, precio, total });
+
+        } catch (txErr) {
+            // Si hay error, revertir transacción
+            await transaction.rollback();
+            throw txErr;
+        }
 
         // Obtener nuevo total del ticket
         const totalResult = await pool.request()
@@ -560,6 +600,34 @@ app.get('/api/tickets/debug', async (req, res) => {
         // Ver un ticket existente como ejemplo
         const exampleResult = await pool.request().query(`
             SELECT TOP 1 * FROM Tickets ORDER BY IdTicket DESC
+            `);
+
+        res.json({
+            columns: columnsResult.recordset,
+            example: exampleResult.recordset[0] || null
+        });
+    } catch (err) {
+        console.error('Error debug:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Ruta temporal para debug - ver estructura de Tickets_Lineas
+app.get('/api/tickets_lineas/debug', async (req, res) => {
+    try {
+        const pool = await getConnection();
+
+        // Ver columnas de la tabla Tickets_Lineas
+        const columnsResult = await pool.request().query(`
+            SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'Tickets_Lineas'
+            ORDER BY ORDINAL_POSITION
+            `);
+
+        // Ver una línea existente como ejemplo
+        const exampleResult = await pool.request().query(`
+            SELECT TOP 1 * FROM Tickets_Lineas ORDER BY IdTicket DESC
             `);
 
         res.json({

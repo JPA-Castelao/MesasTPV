@@ -116,7 +116,7 @@ function actualizarEstadoMesaEnUso(idCliente) {
         // Restaurar estado original
         const mesa = mesas[idCliente];
         if (mesa) {
-            mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? 'Ocupada' : 'Libre';
+            mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? mesa.total.toFixed(2) + '€' : 'Libre';
         }
     }
 }
@@ -592,9 +592,8 @@ function crearMesaElement(idCliente) {
         <span class="mesa-icon">${ocupada ? '☕' : '🪑'}</span>
         <div class="mesa-info">
             <div class="mesa-numero">${mesa.nombre}</div>
-            <div class="mesa-estado">${ocupada ? 'Ocupada' : 'Libre'}</div>
+            <div class="mesa-estado">${ocupada ? total.toFixed(2) + '€' : 'Libre'}</div>
         </div>
-        ${ocupada && total > 0 ? `<div class="mesa-total">${total.toFixed(2)}€</div>` : ''}
     `;
 
     if (ocupada) {
@@ -697,19 +696,7 @@ function actualizarMesaElement(idCliente) {
 
         mesaElement.classList.toggle('ocupada', mesa.ocupada);
         mesaElement.querySelector('.mesa-icon').textContent = mesa.ocupada ? '☕' : '🪑';
-        mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? 'Ocupada' : 'Libre';
-
-        let totalEl = mesaElement.querySelector('.mesa-total');
-        if (mesa.ocupada && mesa.total > 0) {
-            if (!totalEl) {
-                totalEl = document.createElement('div');
-                totalEl.className = 'mesa-total';
-                mesaElement.appendChild(totalEl);
-            }
-            totalEl.textContent = mesa.total.toFixed(2) + '€';
-        } else if (totalEl) {
-            totalEl.remove();
-        }
+        mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? mesa.total.toFixed(2) + '€' : 'Libre';
     }
 }
 

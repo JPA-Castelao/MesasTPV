@@ -35,8 +35,22 @@ app.use(express.static('.', {
     etag: true
 }));
 
-// Configuración de la base de datos (desde config.json)
-const dbConfig = config.database;
+// Configuración de la base de datos (desde config.json) con optimizaciones de pool
+const dbConfig = {
+    ...config.database,
+    pool: {
+        min: 2,                  // Mantener mínimo 2 conexiones siempre abiertas
+        max: 10,                 // Máximo 10 conexiones
+        idleTimeoutMillis: 600000  // 10 minutos antes de cerrar conexión inactiva (en lugar de 30s por defecto)
+    },
+    options: {
+        ...config.database.options,
+        enableArithAbort: true,
+        trustServerCertificate: config.database.options?.trustServerCertificate !== undefined
+            ? config.database.options.trustServerCertificate
+            : true
+    }
+};
 
 // Configuración del TPV (desde config.json)
 const TPV_CONFIG = config.tpv;
@@ -53,7 +67,10 @@ async function getConnection() {
         if (!pool) {
             console.log('Creando nuevo pool de conexiones...');
             pool = await sql.connect(dbConfig);
-            console.log('Pool de conexiones creado exitosamente');
+            console.log('✅ Pool de conexiones creado exitosamente');
+
+            // Iniciar keep-alive después de crear el pool
+            iniciarKeepAlive();
         }
         return pool;
     } catch (err) {
@@ -61,6 +78,55 @@ async function getConnection() {
         throw err;
     }
 }
+
+// =============================================
+// KEEP-ALIVE - Mantener conexiones y caché calientes
+// =============================================
+
+let keepAliveInterval = null;
+
+function iniciarKeepAlive() {
+    if (keepAliveInterval) {
+        return; // Ya está iniciado
+    }
+
+    console.log('🔥 Iniciando keep-alive cada 3 minutos...');
+
+    // Ejecutar keep-alive cada 3 minutos
+    keepAliveInterval = setInterval(async () => {
+        try {
+            if (!pool) return;
+
+            // Query ligera para mantener conexión activa
+            await pool.request().query('SELECT 1 as KeepAlive');
+
+            // Query para mantener procedimientos compilados en caché
+            // Esto ejecuta el SP con parámetros dummy para compilarlo
+            try {
+                await pool.request().query(`
+                    DECLARE @oXML XML, @iXML NVARCHAR(MAX);
+                    SET @iXML = '<data><IdCaja>${TPV_CONFIG.IdCaja}</IdCaja><IdCliente>0000</IdCliente><IdEmpleado>0</IdEmpleado><IdEmpresa>0</IdEmpresa></data>';
+                    EXEC pTPV_Crear_Ticket_Comandas @iXML = @iXML, @oXML = @oXML OUTPUT;
+                `);
+            } catch (spError) {
+                // Ignorar errores del SP dummy, solo queremos compilarlo
+            }
+
+            console.log('🔥 Keep-alive ejecutado correctamente');
+        } catch (err) {
+            console.error('⚠️ Error en keep-alive:', err.message);
+        }
+    }, 3 * 60 * 1000); // 3 minutos
+}
+
+// Limpiar keep-alive al cerrar
+process.on('SIGINT', () => {
+    console.log('⏹️  Deteniendo keep-alive...');
+    if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+    }
+    process.exit(0);
+});
 
 // =============================================
 // RUTAS API - EMPLEADOS (LOGIN)

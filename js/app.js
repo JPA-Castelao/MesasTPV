@@ -116,7 +116,7 @@ function actualizarEstadoMesaEnUso(idCliente) {
         // Restaurar estado original
         const mesa = mesas[idCliente];
         if (mesa) {
-            mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? '' : 'Libre';
+            mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? `${mesa.total.toFixed(2)}€` : 'Libre';
         }
     }
 }
@@ -729,7 +729,7 @@ function crearMesaElement(idCliente) {
         <span class="mesa-icon">${ocupada ? '☕' : '🪑'}</span>
         <div class="mesa-info">
             <div class="mesa-numero">${mesa.nombre}</div>
-            <div class="mesa-estado">${ocupada ? '' : 'Libre'}</div>
+            <div class="mesa-estado">${ocupada ? `${total.toFixed(2)}€` : 'Libre'}</div>
         </div>
         ${ocupada && total > 0 ? `<div class="mesa-total">${total.toFixed(2)}€</div>` : ''}
     `;
@@ -834,7 +834,7 @@ function actualizarMesaElement(idCliente) {
 
         mesaElement.classList.toggle('ocupada', mesa.ocupada);
         mesaElement.querySelector('.mesa-icon').textContent = mesa.ocupada ? '☕' : '🪑';
-        mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? '' : 'Libre';
+        mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? `${mesa.total.toFixed(2)}€` : 'Libre';
 
         let totalEl = mesaElement.querySelector('.mesa-total');
         if (mesa.ocupada && mesa.total > 0) {
@@ -1014,7 +1014,8 @@ async function agregarProducto(producto) {
                 productoId: producto.id,
                 nombre: producto.nombre,
                 cantidad: 1,
-                precio: producto.precio
+                precio: producto.precio,
+                idEmpleado: empleadoActual?.id
             })
         });
 

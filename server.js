@@ -10,6 +10,7 @@ const compression = require('compression');
 
 const app = express();
 const mesasEnUso = new Map();
+
 // Cargar configuración desde archivo JSON
 let config;
 try {
@@ -24,13 +25,13 @@ try {
 const port = config.server.port;
 
 // Middleware
-app.use(compression()); // Compresión GZIP
+app.use(compression());
 app.use(cors());
 app.use(express.json());
 
 // Servir archivos estáticos con caché
 app.use(express.static('.', {
-    maxAge: '1h', // Cachear archivos estáticos por 1 hora
+    maxAge: '1h',
     etag: true
 }));
 
@@ -185,7 +186,6 @@ app.get('/api/mesas', async (req, res) => {
         const pool = await getConnection();
         console.log('Obteniendo mesas desde Clientes_Datos...');
 
-        // Query optimizada: usa una sola subconsulta en lugar de dos por fila
         const result = await pool.request().query(`
             SELECT 
                 c.IdCliente,
@@ -222,8 +222,7 @@ app.get('/api/mesas', async (req, res) => {
 
         console.log('Mesas obtenidas:', mesas.length);
 
-        // Añadir headers de caché para evitar peticiones innecesarias
-        res.set('Cache-Control', 'private, max-age=10'); // 10 segundos de caché
+        res.set('Cache-Control', 'private, max-age=10');
         res.json(mesas);
     } catch (err) {
         console.error('Error al obtener mesas:', err);
@@ -239,7 +238,6 @@ app.post('/api/mesas/:idCliente/abrir', async (req, res) => {
 
         const pool = await getConnection();
 
-        // Buscar ticket existente con líneas para este cliente
         const result = await pool.request()
             .input('IdCliente', sql.VarChar(50), idCliente)
             .query(`
@@ -272,7 +270,6 @@ app.get('/api/mesas/:idCliente/items', async (req, res) => {
 
         const pool = await getConnection();
 
-        // Obtener items del último ticket de este cliente
         const result = await pool.request()
             .input('IdCliente', sql.VarChar(50), idCliente)
             .query(`
@@ -293,12 +290,58 @@ app.get('/api/mesas/:idCliente/items', async (req, res) => {
     }
 });
 
+// =============================================
+// FUNCIÓN PARA CREAR TICKET CON STORED PROCEDURE
+// =============================================
+
+async function crearTicketConSP(pool, idCliente, idEmpleado) {
+    console.log('Ejecutando pTPV_Crear_Ticket_Comandas para cliente:', idCliente);
+
+    // Construir el XML de entrada
+    const xmlInput = `<data><IdCaja>${TPV_CONFIG.IdCaja}</IdCaja><IdCliente>${idCliente}</IdCliente><IdEmpleado>${idEmpleado || TPV_CONFIG.IdEmpleado || 0}</IdEmpleado><IdEmpresa>${TPV_CONFIG.IdEmpresa || 0}</IdEmpresa></data>`;
+
+    // Ejecutar pTPV_Crear_Ticket_Comandas
+    const result = await pool.request()
+        .query(`
+            DECLARE @oXML XML;
+            EXEC pTPV_Crear_Ticket_Comandas @iXML = '${xmlInput}', @oXML = @oXML OUTPUT;
+            SELECT CAST(@oXML AS NVARCHAR(MAX)) AS respuesta;
+        `);
+
+    // Verificar respuesta
+    const respuesta = result.recordset[0]?.respuesta || '';
+    console.log('Respuesta SP:', respuesta);
+
+    if (respuesta.includes('<Estado>error</Estado>')) {
+        throw new Error('Error al crear ticket: ' + respuesta);
+    }
+
+    // Extraer IdTicket de la respuesta XML
+    const matchIdTicket = respuesta.match(/<IdTicket>(\d+)<\/IdTicket>/);
+    let idTicket = matchIdTicket ? parseInt(matchIdTicket[1]) : 0;
+
+    if (!idTicket || idTicket === 0) {
+        throw new Error('No se pudo obtener el IdTicket creado');
+    }
+
+    console.log('Ticket creado con pTPV_Crear_Ticket_Comandas:', {
+        IdTicket: idTicket,
+        IdCaja: TPV_CONFIG.IdCaja,
+        IdCliente: idCliente
+    });
+
+    return idTicket;
+}
+
+// =============================================
 // Añadir item a mesa (INSERT directo en Tickets_Lineas)
+// =============================================
+
 app.post('/api/mesas/:idCliente/items', async (req, res) => {
     try {
         const idCliente = req.params.idCliente;
-        const { productoId } = req.body;
-        console.log('Agregando item a cliente:', { idCliente, productoId });
+        const { productoId, idEmpleado } = req.body;
+        console.log('Agregando item a cliente:', { idCliente, productoId, idEmpleado });
 
         const pool = await getConnection();
 
@@ -319,7 +362,7 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
         const articulo = articuloResult.recordset[0];
         const precio = articulo.PRECIO || 0;
         const idIva = articulo.IdIva || 0;
-        const cantidad = 1; // Siempre cantidad 1
+        const cantidad = 1;
         const total = cantidad * precio;
 
         console.log('Datos del artículo:', { precio, idIva, cantidad, total });
@@ -331,52 +374,12 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
 
         let idTicket = ticketResult.recordset[0]?.IdTicket;
 
-        // Si no hay ticket, crear uno nuevo
+        // Si no hay ticket, crear uno nuevo usando el Stored Procedure
         if (!idTicket) {
-            console.log('No hay ticket, creando uno nuevo...');
+            console.log('No hay ticket, creando uno nuevo con pTPV_Crear_Ticket_Comandas...');
 
-            // Obtener IdContacto del cliente
-            const clienteResult = await pool.request()
-                .input('IdCliente', sql.VarChar(50), idCliente)
-                .query(`SELECT IdContacto FROM Clientes_Datos WHERE IdCliente = @IdCliente`);
-            const idContacto = clienteResult.recordset[0]?.IdContacto || 0;
-
-            // Obtener siguiente IdTicket y Numero
-            const maxIdResult = await pool.request().query('SELECT ISNULL(MAX(IdTicket), 0) + 1 as nextId FROM Tickets');
-            idTicket = maxIdResult.recordset[0].nextId;
-
-            const maxNumResult = await pool.request()
-                .input('IdCaja', sql.Int, TPV_CONFIG.IdCaja)
-                .input('IdSerie', sql.Int, TPV_CONFIG.IdSerie)
-                .query(`SELECT ISNULL(MAX(Numero), 0) + 1 as nextNumero FROM Tickets WHERE IdCaja = @IdCaja AND IdSerie = @IdSerie`);
-            const nextNumero = maxNumResult.recordset[0].nextNumero;
-
-            // Insertar ticket
-            await pool.request()
-                .input('IdTicket', sql.Int, idTicket)
-                .input('IdCaja', sql.Int, TPV_CONFIG.IdCaja)
-                .input('IdSerie', sql.Int, TPV_CONFIG.IdSerie)
-                .input('Numero', sql.Int, nextNumero)
-                .input('Fecha', sql.DateTime, new Date())
-                .input('IdEmpleado', sql.Int, TPV_CONFIG.IdEmpleado)
-                .input('IdCliente', sql.VarChar(50), idCliente)
-                .input('IdContacto', sql.Int, idContacto)
-                .input('IdContactoA', sql.Int, idContacto)
-                .input('IdContactoP', sql.Int, idContacto)
-                .input('IdEstado', sql.Int, TPV_CONFIG.IdEstado)
-                .input('IdEmpresa', sql.Int, TPV_CONFIG.IdEmpresa)
-                .input('IdMoneda', sql.Int, TPV_CONFIG.IdMoneda)
-                .input('Cambio', sql.Decimal(10, 2), 1)
-                .input('IdOperacion', sql.Int, TPV_CONFIG.IdOperacion)
-                .input('FechaDev', sql.DateTime, null)
-                .input('FechaEstDev', sql.DateTime, null)
-                .input('IdPedido_Abono', sql.Int, null)
-                .input('IdOferta', sql.Int, null)
-                .query(`
-                    INSERT INTO Tickets (IdTicket, IdCaja, IdSerie, Numero, Fecha, IdEmpleado, IdCliente, IdContacto, IdContactoA, IdContactoP, IdEstado, IdEmpresa, IdMoneda, Cambio, IdOperacion, FechaDev, FechaEstDev, IdPedido_Abono, IdOferta)
-                    VALUES (@IdTicket, @IdCaja, @IdSerie, @Numero, @Fecha, @IdEmpleado, @IdCliente, @IdContacto, @IdContactoA, @IdContactoP, @IdEstado, @IdEmpresa, @IdMoneda, @Cambio, @IdOperacion, @FechaDev, @FechaEstDev, @IdPedido_Abono, @IdOferta)
-                `);
-            console.log('Ticket creado con IdTicket:', idTicket);
+            // Crear ticket usando el stored procedure con el IdEmpleado
+            idTicket = await crearTicketConSP(pool, idCliente, idEmpleado);
         }
 
         // Obtener IdAlmacen de la caja
@@ -412,7 +415,7 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
                 .input('Descuento', sql.Decimal(18, 6), 0)
                 .input('IdIVA', sql.SmallInt, idIva)
                 .input('Total', sql.Decimal(18, 6), total)
-                .input('Usuario', sql.VarChar(50), 'TPV')
+                .input('Usuario', sql.VarChar(50), 'COMANDAS')
                 .input('fechaini', sql.DateTime, null)
                 .input('fechadev', sql.DateTime, null)
                 .input('tipoalquiler', sql.SmallInt, null)
@@ -423,13 +426,11 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
                     VALUES (@IdTicket, @IdLinea, @IdArticulo, @IdAlmacen, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @Usuario, @fechaini, @fechadev, @tipoalquiler, @idlinea_abono, @idlinea_oferta)
                 `);
 
-            // Confirmar transacción
             await transaction.commit();
 
             console.log('Línea insertada:', { idTicket, idLinea, productoId, precio, total });
 
         } catch (txErr) {
-            // Si hay error, revertir transacción
             await transaction.rollback();
             throw txErr;
         }
@@ -561,16 +562,16 @@ app.get('/api/articulos', async (req, res) => {
         console.log('Obteniendo artículos...');
 
         const result = await pool.request().query(`
-        SELECT
-        a.iDaRTICULO,
-            a.DESCRIP,
-            a.DESCRIPFAMILIA,
-            P.PRECIO
+            SELECT
+                a.iDaRTICULO,
+                a.DESCRIP,
+                a.DESCRIPFAMILIA,
+                P.PRECIO
             FROM pers_OrdenArticulosTPV a
             LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo
             WHERE IDCAJA = ${TPV_CONFIG.IdCaja} AND IdLista = 0
             ORDER BY a.DESCRIPFAMILIA, a.DESCRIP
-            `);
+        `);
 
         console.log('Artículos obtenidos:', result.recordset.length);
         res.json(result.recordset);
@@ -589,18 +590,16 @@ app.get('/api/tickets/debug', async (req, res) => {
     try {
         const pool = await getConnection();
 
-        // Ver columnas de la tabla Tickets
         const columnsResult = await pool.request().query(`
             SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
             FROM INFORMATION_SCHEMA.COLUMNS 
             WHERE TABLE_NAME = 'Tickets'
             ORDER BY ORDINAL_POSITION
-            `);
+        `);
 
-        // Ver un ticket existente como ejemplo
         const exampleResult = await pool.request().query(`
             SELECT TOP 1 * FROM Tickets ORDER BY IdTicket DESC
-            `);
+        `);
 
         res.json({
             columns: columnsResult.recordset,
@@ -617,18 +616,16 @@ app.get('/api/tickets_lineas/debug', async (req, res) => {
     try {
         const pool = await getConnection();
 
-        // Ver columnas de la tabla Tickets_Lineas
         const columnsResult = await pool.request().query(`
             SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
             FROM INFORMATION_SCHEMA.COLUMNS 
             WHERE TABLE_NAME = 'Tickets_Lineas'
             ORDER BY ORDINAL_POSITION
-            `);
+        `);
 
-        // Ver una línea existente como ejemplo
         const exampleResult = await pool.request().query(`
             SELECT TOP 1 * FROM Tickets_Lineas ORDER BY IdTicket DESC
-            `);
+        `);
 
         res.json({
             columns: columnsResult.recordset,
@@ -722,16 +719,14 @@ app.get('/', (req, res) => {
 // INICIAR SERVIDOR HTTPS/HTTP + WEBSOCKET
 // =============================================
 
-const HOST = '0.0.0.0'; // Esto permite conexiones externas
+const HOST = '0.0.0.0';
 
-// Intentar cargar certificados SSL
 let server;
 const sslKeyPath = path.join(__dirname, 'ssl', 'server.key');
 const sslCertPath = path.join(__dirname, 'ssl', 'server.cert');
 const sslPfxPath = path.join(__dirname, 'ssl', 'server.pfx');
 
 if (fs.existsSync(sslPfxPath)) {
-    // Usar HTTPS con archivo PFX (generado por PowerShell)
     const httpsOptions = {
         pfx: fs.readFileSync(sslPfxPath),
         passphrase: 'desarrollo'
@@ -747,7 +742,6 @@ if (fs.existsSync(sslPfxPath)) {
             .catch(err => console.error('❌ Error al conectar con la base de datos:', err));
     });
 } else if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
-    // Usar HTTPS con archivos key/cert separados (generado por OpenSSL)
     const httpsOptions = {
         key: fs.readFileSync(sslKeyPath),
         cert: fs.readFileSync(sslCertPath)
@@ -763,7 +757,6 @@ if (fs.existsSync(sslPfxPath)) {
             .catch(err => console.error('❌ Error al conectar con la base de datos:', err));
     });
 } else {
-    // Fallback a HTTP si no hay certificados
     server = http.createServer(app);
     server.listen(port, HOST, () => {
         console.log(`🚀 Servidor HTTP corriendo en http://localhost:${port}`);

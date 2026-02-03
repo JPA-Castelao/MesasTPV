@@ -357,6 +357,52 @@ function aplicarVista() {
 }
 
 // =============================================
+// BÚSQUEDA DE PRODUCTOS
+// =============================================
+
+function configurarBusquedaProductos() {
+    const searchInput = document.getElementById('search-input');
+    const btnLimpiar = document.getElementById('btn-limpiar-busqueda');
+
+    if (!searchInput || !btnLimpiar) return;
+
+    // Búsqueda en tiempo real
+    searchInput.addEventListener('input', (e) => {
+        const termino = e.target.value;
+        mostrarProductos(termino);
+
+        // Mostrar/ocultar botón de limpiar
+        if (termino.trim()) {
+            btnLimpiar.classList.add('visible');
+            btnLimpiar.style.display = 'flex';
+        } else {
+            btnLimpiar.classList.remove('visible');
+            btnLimpiar.style.display = 'none';
+        }
+    });
+
+    // Limpiar búsqueda
+    btnLimpiar.addEventListener('click', () => {
+        searchInput.value = '';
+        mostrarProductos();
+        btnLimpiar.classList.remove('visible');
+        btnLimpiar.style.display = 'none';
+        searchInput.focus();
+    });
+
+    // Limpiar al presionar Escape
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            searchInput.value = '';
+            mostrarProductos();
+            btnLimpiar.classList.remove('visible');
+            btnLimpiar.style.display = 'none';
+            searchInput.blur();
+        }
+    });
+}
+
+// =============================================
 // MODAL TICKET (ABRIR/CERRAR)
 // =============================================
 
@@ -695,6 +741,7 @@ async function init() {
 
     configurarVistas();
     configurarTogglePedido();
+    configurarBusquedaProductos();
 
     // Botón de refresh manual de mesas
     const refreshMesasBtn = document.getElementById('refresh-mesas');
@@ -954,10 +1001,44 @@ async function abrirMesa(idCliente) {
 // PRODUCTOS
 // =============================================
 
-function mostrarProductos() {
+function mostrarProductos(terminoBusqueda = '') {
     productosDisponibles.innerHTML = '';
 
-    const categorias = [...new Set(productos.map(p => p.categoria))].filter(c => c);
+    // Filtrar productos si hay un término de búsqueda
+    let productosFiltrados = productos;
+    if (terminoBusqueda.trim()) {
+        const termino = terminoBusqueda.toLowerCase();
+        productosFiltrados = productos.filter(p =>
+            p.nombre.toLowerCase().includes(termino)
+        );
+    }
+
+    // Si hay búsqueda activa, mostrar todos los productos sin agrupar por categoría
+    if (terminoBusqueda.trim()) {
+        if (productosFiltrados.length === 0) {
+            productosDisponibles.innerHTML = `
+                <div style="padding: 2rem; text-align: center; color: #999;">
+                    No se encontraron productos
+                </div>
+            `;
+            return;
+        }
+
+        productosFiltrados.forEach(producto => {
+            const productoElement = document.createElement('div');
+            productoElement.className = 'producto';
+            productoElement.innerHTML = `
+                <div class="producto-nombre">${producto.nombre}</div>
+                <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
+            `;
+            productoElement.addEventListener('click', () => agregarProducto(producto));
+            productosDisponibles.appendChild(productoElement);
+        });
+        return;
+    }
+
+    // Vista normal por categorías
+    const categorias = [...new Set(productosFiltrados.map(p => p.categoria))].filter(c => c);
 
     categorias.forEach(categoria => {
         const categoriaElement = document.createElement('div');
@@ -973,7 +1054,7 @@ function mostrarProductos() {
         const productosContainer = document.createElement('div');
         productosContainer.className = 'productos-categoria-container collapsed';
 
-        const productosCategoria = productos.filter(p => p.categoria === categoria);
+        const productosCategoria = productosFiltrados.filter(p => p.categoria === categoria);
         productosCategoria.forEach(producto => {
             const productoElement = document.createElement('div');
             productoElement.className = 'producto';
@@ -1226,7 +1307,8 @@ async function limpiarMesa() {
     try {
         if (!mesaActual) return;
 
-        if (!confirm('¿Seguro que quieres limpiar la mesa sin crear ticket?')) {
+        const confirmar = await mostrarModalConfirmar();
+        if (!confirmar) {
             return;
         }
 
@@ -1248,6 +1330,49 @@ async function limpiarMesa() {
         alert('Error al limpiar la mesa');
     }
 }
+
+// =============================================
+// MODAL CONFIRMACIÓN PERSONALIZADO
+// =============================================
+
+function mostrarModalConfirmar() {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('modal-confirmar-limpiar');
+        const btnConfirmar = document.getElementById('btn-confirmar-limpiar');
+        const btnCancelar = document.getElementById('btn-cancelar-limpiar');
+
+        modal.style.display = 'block';
+
+        const confirmarHandler = () => {
+            modal.style.display = 'none';
+            btnConfirmar.removeEventListener('click', confirmarHandler);
+            btnCancelar.removeEventListener('click', cancelarHandler);
+            resolve(true);
+        };
+
+        const cancelarHandler = () => {
+            modal.style.display = 'none';
+            btnConfirmar.removeEventListener('click', confirmarHandler);
+            btnCancelar.removeEventListener('click', cancelarHandler);
+            resolve(false);
+        };
+
+        btnConfirmar.addEventListener('click', confirmarHandler);
+        btnCancelar.addEventListener('click', cancelarHandler);
+
+        // Cerrar al hacer click fuera del modal
+        modal.addEventListener('click', function clickOutside(e) {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+                btnConfirmar.removeEventListener('click', confirmarHandler);
+                btnCancelar.removeEventListener('click', cancelarHandler);
+                modal.removeEventListener('click', clickOutside);
+                resolve(false);
+            }
+        });
+    });
+}
+
 
 // =============================================
 // CERRAR MODAL

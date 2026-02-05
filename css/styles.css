@@ -1557,6 +1557,10 @@ body {
     border-top: 2px solid rgba(0, 0, 0, 0.08);
     background: white;
     flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
 }
 
 .total p {
@@ -1565,6 +1569,50 @@ body {
     color: var(--cafe-dark);
     text-align: right;
     margin: 0;
+}
+
+.quantity-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--cafe-light);
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--cafe-latte);
+}
+
+.quantity-btn {
+    background: var(--cafe-brown);
+    color: white;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.quantity-btn:hover {
+    background: var(--cafe-dark);
+    transform: scale(1.1);
+}
+
+.quantity-btn:active {
+    transform: scale(0.95);
+}
+
+.quantity-display {
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: var(--cafe-dark);
+    min-width: 40px;
+    text-align: center;
 }
 
 /* Botones de acción */
@@ -1773,11 +1821,28 @@ body {
     }
 
     .total {
-        padding: 0.875rem 1rem;
+        padding: 0.75rem 0.875rem;
+        gap: 0.5rem;
     }
 
     .total p {
-        font-size: 1.2rem;
+        font-size: 1.1rem;
+    }
+
+    .quantity-controls {
+        padding: 0.4rem 0.6rem;
+        gap: 0.4rem;
+    }
+
+    .quantity-btn {
+        width: 30px;
+        height: 30px;
+        font-size: 1.1rem;
+    }
+
+    .quantity-display {
+        font-size: 1.1rem;
+        min-width: 35px;
     }
 
     .productos-lista h3 {

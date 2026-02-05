@@ -776,6 +776,47 @@ async function refrescarMesas() {
 }
 
 // =============================================
+// CONTROLES DE CANTIDAD
+// =============================================
+
+// Variable para almacenar la cantidad a insertar
+let cantidadAInsertar = 1;
+
+function configurarControlesCantidad() {
+    const btnIncrease = document.getElementById('btn-increase-qty');
+    const btnDecrease = document.getElementById('btn-decrease-qty');
+    const quantityDisplay = document.getElementById('total-quantity');
+
+    if (!btnIncrease || !btnDecrease || !quantityDisplay) return;
+
+    // Actualizar display inicial
+    quantityDisplay.textContent = cantidadAInsertar;
+
+    // Aumentar cantidad a insertar
+    btnIncrease.addEventListener('click', () => {
+        cantidadAInsertar++;
+        quantityDisplay.textContent = cantidadAInsertar;
+    });
+
+    // Disminuir cantidad a insertar
+    btnDecrease.addEventListener('click', () => {
+        if (cantidadAInsertar > 1) {
+            cantidadAInsertar--;
+            quantityDisplay.textContent = cantidadAInsertar;
+        }
+    });
+}
+
+// Función para resetear la cantidad después de insertar
+function resetearCantidad() {
+    cantidadAInsertar = 1;
+    const quantityDisplay = document.getElementById('total-quantity');
+    if (quantityDisplay) {
+        quantityDisplay.textContent = cantidadAInsertar;
+    }
+}
+
+// =============================================
 // CERRAR SESIÓN Y LIMPIAR CACHÉ 
 // =============================================
 
@@ -865,6 +906,7 @@ async function init() {
     configurarTogglePedido();
     configurarBusquedaProductos();
     configurarBotonFavoritos();
+    configurarControlesCantidad();
 
     // Botón de refresh manual de mesas
     const refreshMesasBtn = document.getElementById('refresh-mesas');
@@ -1216,7 +1258,7 @@ async function agregarProducto(producto) {
     try {
         if (!mesaActual) return;
 
-        console.log('Agregando producto:', producto);
+        console.log('Agregando producto:', producto, 'Cantidad:', cantidadAInsertar);
 
         const response = await fetch(`${API_BASE}/mesas/${mesaActual}/items`, {
             method: 'POST',
@@ -1224,7 +1266,7 @@ async function agregarProducto(producto) {
             body: JSON.stringify({
                 productoId: producto.id,
                 nombre: producto.nombre,
-                cantidad: 1,
+                cantidad: cantidadAInsertar,
                 precio: producto.precio,
                 idEmpleado: empleadoActual?.id
             })
@@ -1239,6 +1281,9 @@ async function agregarProducto(producto) {
 
         const data = await response.json();
         console.log('Producto agregado en servidor. Total:', data.total);
+
+        // Resetear la cantidad a 1 después de agregar
+        resetearCantidad();
 
         // Recargar items desde la BD para mantener sincronía
         const itemsResponse = await fetch(`${API_BASE}/mesas/${mesaActual}/items`);

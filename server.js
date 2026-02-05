@@ -406,8 +406,8 @@ async function crearTicketConSP(pool, idCliente, idEmpleado) {
 app.post('/api/mesas/:idCliente/items', async (req, res) => {
     try {
         const idCliente = req.params.idCliente;
-        const { productoId, idEmpleado } = req.body;
-        console.log('Agregando item a cliente:', { idCliente, productoId, idEmpleado });
+        const { productoId, idEmpleado, cantidad: cantidadSolicitada } = req.body;
+        console.log('Agregando item a cliente:', { idCliente, productoId, idEmpleado, cantidad: cantidadSolicitada });
 
         const pool = await getConnection();
 
@@ -428,7 +428,7 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
         const articulo = articuloResult.recordset[0];
         const precio = articulo.PRECIO || 0;
         const idIva = articulo.IdIva || 0;
-        const cantidad = 1;
+        const cantidad = cantidadSolicitada || 1;
         const total = cantidad * precio;
 
         console.log('Datos del artículo:', { precio, idIva, cantidad, total });
@@ -515,6 +515,57 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
     } catch (err) {
         console.error('Error al agregar item:', err);
         res.status(500).json({ error: 'Error al agregar item', details: err.message });
+    }
+});
+
+// Actualizar cantidad de un item
+app.put('/api/mesas/:idCliente/items/:itemId/cantidad', async (req, res) => {
+    try {
+        const idCliente = req.params.idCliente;
+        const itemId = req.params.itemId;
+        const { cantidad } = req.body;
+        console.log('Actualizando cantidad del item:', { idCliente, itemId, cantidad });
+
+        const pool = await getConnection();
+
+        // Buscar ticket activo para este cliente
+        const ticketResult = await pool.request()
+            .input('IdCliente', sql.VarChar(50), idCliente)
+            .query(`SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`);
+
+        const idTicket = ticketResult.recordset[0]?.IdTicket;
+
+        if (idTicket) {
+            // Buscar la línea del artículo por su ID
+            const lineaResult = await pool.request()
+                .input('IdTicket', sql.Int, idTicket)
+                .input('IdArticulo', sql.VarChar(50), itemId)
+                .query(`SELECT IdLinea, Precio FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdArticulo = @IdArticulo`);
+
+            if (lineaResult.recordset.length > 0) {
+                const linea = lineaResult.recordset[0];
+                const nuevoTotal = cantidad * linea.Precio;
+
+                // Actualizar cantidad y total
+                await pool.request()
+                    .input('IdTicket', sql.Int, idTicket)
+                    .input('IdArticulo', sql.VarChar(50), itemId)
+                    .input('Cantidad', sql.Decimal(18, 6), cantidad)
+                    .input('Total', sql.Decimal(18, 6), nuevoTotal)
+                    .query(`UPDATE Tickets_Lineas SET Cantidad = @Cantidad, Total = @Total WHERE IdTicket = @IdTicket AND IdArticulo = @IdArticulo`);
+
+                console.log('Cantidad actualizada:', { cantidad, nuevoTotal });
+            }
+        }
+
+        res.json({ success: true });
+
+        // Notificar a todos los clientes WebSocket
+        notificarClientes('mesa_actualizada', { idCliente });
+
+    } catch (err) {
+        console.error('Error al actualizar cantidad:', err);
+        res.status(500).json({ error: 'Error al actualizar cantidad', details: err.message });
     }
 });
 

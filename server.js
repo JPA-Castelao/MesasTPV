@@ -339,10 +339,10 @@ app.get('/api/mesas/:idCliente/items', async (req, res) => {
         const result = await pool.request()
             .input('IdCliente', sql.VarChar(50), idCliente)
             .query(`
-                SELECT tl.IdArticulo as id, a.DESCRIP as nombre, tl.Cantidad as cantidad, tl.Precio as precio
+                SELECT tl.IdArticulo as id, art.DESCRIP as nombre, tl.Cantidad as cantidad, tl.Precio as precio
                 FROM Tickets t
                 INNER JOIN Tickets_Lineas tl ON t.IdTicket = tl.IdTicket
-                LEFT JOIN pers_OrdenArticulosTPV a ON tl.IdArticulo = a.iDaRTICULO AND a.IDCAJA = ${TPV_CONFIG.IdCaja}
+                LEFT JOIN Articulos art ON tl.IdArticulo = art.IdArticulo
                 WHERE t.IdCliente = @IdCliente
                   AND t.IdTicket = (SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC)
                 ORDER BY tl.IdLinea ASC
@@ -630,13 +630,14 @@ app.get('/api/articulos', async (req, res) => {
         const result = await pool.request().query(`
             SELECT
                 a.iDaRTICULO,
-                a.DESCRIP,
+                art.DESCRIP,
                 a.DESCRIPFAMILIA,
                 P.PRECIO
             FROM pers_OrdenArticulosTPV a
+            LEFT JOIN Articulos art ON a.iDaRTICULO = art.IdArticulo
             LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo
             WHERE IDCAJA = ${TPV_CONFIG.IdCaja} AND IdLista = 0
-            ORDER BY a.DESCRIPFAMILIA, a.DESCRIP
+            ORDER BY a.DESCRIPFAMILIA, art.DESCRIP
         `);
 
         console.log('Artículos obtenidos:', result.recordset.length);
@@ -646,6 +647,59 @@ app.get('/api/articulos', async (req, res) => {
         res.status(500).json({ error: 'Error al obtener artículos', details: err.message });
     }
 });
+
+// Obtener productos favoritos
+app.get('/api/favoritos', async (req, res) => {
+    try {
+        const pool = await getConnection();
+        console.log('🌟 Obteniendo productos favoritos...');
+        console.log('🌟 IdCaja configurado:', TPV_CONFIG.IdCaja);
+
+        // Primero verificar que existen favoritos
+        const testQuery = await pool.request().query(`
+            SELECT COUNT(*) as total FROM TPV_Cajas_Favoritos_Asociados WHERE IdCaja = ${TPV_CONFIG.IdCaja}
+        `);
+        console.log('🌟 Total favoritos en tabla:', testQuery.recordset[0].total);
+
+        // Consulta principal con LEFT JOIN para diagnóstico
+        const result = await pool.request().query(`
+            SELECT
+                f.IdArticulo,
+                a.iDaRTICULO,
+                art.DESCRIP,
+                a.DESCRIPFAMILIA,
+                P.PRECIO
+            FROM TPV_Cajas_Favoritos_Asociados f
+            LEFT JOIN pers_OrdenArticulosTPV a ON f.IdArticulo = a.iDaRTICULO AND a.IDCAJA = ${TPV_CONFIG.IdCaja}
+            LEFT JOIN Articulos art ON f.IdArticulo = art.IdArticulo
+            LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo AND p.IdLista = 0
+            WHERE f.IdCaja = ${TPV_CONFIG.IdCaja}
+            ORDER BY art.DESCRIP
+        `);
+
+        console.log('🌟 Productos favoritos obtenidos:', result.recordset.length);
+        if (result.recordset.length > 0) {
+            console.log('🌟 Primeros 3 favoritos (raw):', result.recordset.slice(0, 3));
+        } else {
+            console.log('⚠️ No se encontraron favoritos. Verificando tabla...');
+            // Consulta de diagnóstico
+            const diagnostico = await pool.request().query(`
+                SELECT COUNT(*) as total FROM TPV_Cajas_Favoritos_Asociados WHERE IdCaja = ${TPV_CONFIG.IdCaja}
+            `);
+            console.log('⚠️ Total de favoritos en la tabla para IdCaja ${TPV_CONFIG.IdCaja}:', diagnostico.recordset[0].total);
+        }
+
+        // Filtrar los que tienen precio (que se encontraron en las otras tablas)
+        const favoritosValidos = result.recordset.filter(item => item.PRECIO != null);
+        console.log('🌟 Favoritos válidos con precio:', favoritosValidos.length);
+
+        res.json(favoritosValidos);
+    } catch (err) {
+        console.error('❌ Error al obtener favoritos:', err);
+        res.status(500).json({ error: 'Error al obtener favoritos', details: err.message });
+    }
+});
+
 
 // =============================================
 // RUTAS API - TICKETS (crear en tablas TPV)

@@ -1106,6 +1106,52 @@ body {
     transform: rotate(90deg);
 }
 
+/* Modal Header Buttons Container */
+.modal-header-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Botón de Favoritos (Estrella) */
+.btn-favoritos {
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    padding: 0;
+}
+
+.btn-favoritos:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px) scale(1.05);
+}
+
+.btn-favoritos:active {
+    transform: scale(0.95);
+}
+
+.btn-favoritos.active {
+    background: #fbbf24;
+    color: #78350f;
+}
+
+.btn-favoritos.active svg {
+    fill: currentColor;
+}
+
+.btn-favoritos svg {
+    transition: all 0.3s ease;
+}
+
+
 /* ========== PRODUCTOS CONTAINER ========== */
 .productos-container {
     display: flex;
@@ -1232,6 +1278,32 @@ body {
     color: var(--cafe-brown);
     font-size: 1rem;
 }
+
+
+.producto-favorito {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-left: 1.25rem;
+}
+
+.producto-star {
+    font-size: 0.95rem;
+    opacity: 0.85;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+}
+
+.producto-favorito:hover .producto-star {
+    opacity: 1;
+    transform: scale(1.15);
+}
+
+.producto-favorito .producto-nombre {
+    flex: 1;
+}
+
+
 
 /* ========== PEDIDO ACTUAL ========== */
 .pedido-actual {

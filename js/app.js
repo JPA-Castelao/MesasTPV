@@ -266,6 +266,7 @@ async function validarPin() {
             // Iniciar la app
             await cargarProductos();
             await cargarMesas();
+            await cargarProductosFavoritos();
             await cargarMesasEnUso();
 
             // Conectar WebSocket
@@ -369,6 +370,16 @@ function configurarBusquedaProductos() {
     // Búsqueda en tiempo real
     searchInput.addEventListener('input', (e) => {
         const termino = e.target.value;
+
+        // Si el usuario empieza a buscar, desactivar modo favoritos
+        if (termino.trim() && mostrandoFavoritos) {
+            const btnFavoritos = document.getElementById('btn-favoritos');
+            if (btnFavoritos) {
+                btnFavoritos.classList.remove('active');
+                mostrandoFavoritos = false;
+            }
+        }
+
         mostrarProductos(termino);
 
         // Mostrar/ocultar botón de limpiar
@@ -494,6 +505,108 @@ function cerrarModalTicket() {
     const modalTicket = document.getElementById('modal-ticket');
     modalTicket.style.display = 'none';
 }
+
+// =============================================
+// FAVORITOS
+// =============================================
+
+let productosFavoritos = [];
+let mostrandoFavoritos = false;
+
+async function cargarProductosFavoritos() {
+    try {
+        console.log('⭐ Cargando productos favoritos...');
+        const response = await fetch(`${API_BASE}/favoritos`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('⭐ Favoritos recibidos de API:', data.length, data);
+
+        productosFavoritos = data.map(item => ({
+            id: item.iDaRTICULO || item.IdArticulo,
+            nombre: item.DESCRIP,
+            precio: parseFloat(item.PRECIO) || 0,
+            categoria: item.DESCRIPFAMILIA
+        }));
+
+        console.log('⭐ Favoritos procesados:', productosFavoritos.length, productosFavoritos);
+    } catch (error) {
+        console.error('❌ Error al cargar productos favoritos:', error);
+        productosFavoritos = [];
+    }
+}
+
+function configurarBotonFavoritos() {
+    console.log('🔧 Configurando botón de favoritos...');
+    const btnFavoritos = document.getElementById('btn-favoritos');
+    console.log('🔧 Botón encontrado:', btnFavoritos);
+
+    if (!btnFavoritos) {
+        console.error('❌ No se encontró el botón btn-favoritos');
+        return;
+    }
+
+    btnFavoritos.addEventListener('click', () => {
+        console.log('⭐ Click en botón favoritos!');
+        toggleFavoritos();
+    });
+
+    console.log('✅ Event listener agregado al botón favoritos');
+}
+
+function toggleFavoritos() {
+    console.log('⭐ toggleFavoritos llamado. Estado actual:', mostrandoFavoritos);
+    const btnFavoritos = document.getElementById('btn-favoritos');
+    mostrandoFavoritos = !mostrandoFavoritos;
+
+    console.log('⭐ Nuevo estado:', mostrandoFavoritos);
+    console.log('⭐ Favoritos disponibles:', productosFavoritos.length);
+
+    if (mostrandoFavoritos) {
+        btnFavoritos.classList.add('active');
+        mostrarProductosFavoritos();
+    } else {
+        btnFavoritos.classList.remove('active');
+        mostrarProductos(); // Mostrar todos los productos
+    }
+}
+
+function mostrarProductosFavoritos() {
+    console.log('⭐ mostrarProductosFavoritos llamado');
+    console.log('⭐ productosFavoritos:', productosFavoritos);
+    console.log('⭐ productosDisponibles element:', productosDisponibles);
+    console.log('⭐ Mostrando productos favoritos. Total:', productosFavoritos.length);
+    productosDisponibles.innerHTML = '';
+
+    if (productosFavoritos.length === 0) {
+        productosDisponibles.innerHTML = `
+            <div style="padding: 2rem; text-align: center; color: #999;">
+                <p style="font-size: 2rem; margin-bottom: 0.5rem;">⭐</p>
+                <p>No hay productos favoritos configurados</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Mostrar favoritos sin agrupar por categoría
+    productosFavoritos.forEach(producto => {
+        const productoElement = document.createElement('div');
+        productoElement.className = 'producto producto-favorito';
+        productoElement.innerHTML = `
+            <span class="producto-star">⭐</span>
+            <div class="producto-nombre">${producto.nombre}</div>
+            <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
+        `;
+        productoElement.addEventListener('click', () => agregarProducto(producto));
+        productosDisponibles.appendChild(productoElement);
+    });
+
+    console.log('✅ Productos favoritos renderizados');
+}
+
 
 // =============================================
 // FUNCIONES DE ORDEN (DRAG & DROP)
@@ -718,6 +831,15 @@ async function init() {
     if (tieneSesion) {
         actualizarEmpleadoActual();
         await cargarProductos();
+
+        try {
+            console.log('🔄 Iniciando carga de favoritos...');
+            await cargarProductosFavoritos();
+            console.log('✅ Carga de favoritos completada');
+        } catch (error) {
+            console.error('❌ Error en carga de favoritos (no crítico):', error);
+        }
+
         await cargarMesas();
         await cargarMesasEnUso();
 
@@ -742,6 +864,7 @@ async function init() {
     configurarVistas();
     configurarTogglePedido();
     configurarBusquedaProductos();
+    configurarBotonFavoritos();
 
     // Botón de refresh manual de mesas
     const refreshMesasBtn = document.getElementById('refresh-mesas');
@@ -967,6 +1090,13 @@ async function abrirMesa(idCliente) {
 
         const mesa = mesas[idCliente];
         numeroMesaSpan.textContent = mesa.nombre;
+
+        // Resetear estado del botón de favoritos
+        mostrandoFavoritos = false;
+        const btnFavoritos = document.getElementById('btn-favoritos');
+        if (btnFavoritos) {
+            btnFavoritos.classList.remove('active');
+        }
 
         // Abrir mesa en el servidor
         await fetch(`${API_BASE}/mesas/${idCliente}/abrir`, {

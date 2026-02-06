@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Docs - Cafetería El Trigal</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface-2: #222633;
+            --border: #2d3247;
+            --text: #e4e7ef;
+            --text-dim: #8b90a5;
+            --accent: #6c9cff;
+            --accent-dim: rgba(108, 156, 255, 0.12);
+
+            --get: #61d9a5;
+            --get-bg: rgba(97, 217, 165, 0.08);
+            --get-border: rgba(97, 217, 165, 0.25);
+            --post: #6c9cff;
+            --post-bg: rgba(108, 156, 255, 0.08);
+            --post-border: rgba(108, 156, 255, 0.25);
+            --put: #f5a623;
+            --put-bg: rgba(245, 166, 35, 0.08);
+            --put-border: rgba(245, 166, 35, 0.25);
+            --delete: #ff6b6b;
+            --delete-bg: rgba(255, 107, 107, 0.08);
+            --delete-border: rgba(255, 107, 107, 0.25);
+
+            --radius: 10px;
+            --mono: 'JetBrains Mono', monospace;
+            --sans: 'Outfit', sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        /* ── Layout ── */
+        .app { display: flex; min-height: 100vh; }
+
+        .sidebar {
+            width: 280px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+            overflow-y: auto;
+            z-index: 100;
+        }
+
+        .sidebar-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-header h1 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+
+        .sidebar-header .version {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-top: 0.25rem;
+            font-family: var(--mono);
+        }
+
+        .sidebar-header .base-url {
+            font-size: 0.7rem;
+            color: var(--accent);
+            font-family: var(--mono);
+            margin-top: 0.5rem;
+            padding: 0.4rem 0.6rem;
+            background: var(--accent-dim);
+            border-radius: 6px;
+            display: inline-block;
+        }
+
+        .nav-group { padding: 0.75rem 0; }
+
+        .nav-group-title {
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-dim);
+            padding: 0.5rem 1.5rem;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.5rem 1.5rem;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-decoration: none;
+            color: var(--text);
+            font-size: 0.82rem;
+        }
+
+        .nav-item:hover { background: var(--surface-2); }
+
+        .nav-method {
+            font-family: var(--mono);
+            font-size: 0.6rem;
+            font-weight: 700;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            min-width: 38px;
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        .nav-method.get { background: var(--get-bg); color: var(--get); border: 1px solid var(--get-border); }
+        .nav-method.post { background: var(--post-bg); color: var(--post); border: 1px solid var(--post-border); }
+        .nav-method.put { background: var(--put-bg); color: var(--put); border: 1px solid var(--put-border); }
+        .nav-method.delete { background: var(--delete-bg); color: var(--delete); border: 1px solid var(--delete-border); }
+
+        .main {
+            margin-left: 280px;
+            flex: 1;
+            padding: 2rem 3rem;
+            max-width: 900px;
+        }
+
+        /* ── Hero ── */
+        .hero {
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .hero h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .hero p {
+            color: var(--text-dim);
+            font-size: 0.95rem;
+            max-width: 600px;
+        }
+
+        /* ── Section ── */
+        .section {
+            margin-bottom: 2.5rem;
+        }
+
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* ── Endpoint Card ── */
+        .endpoint {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 1rem;
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+
+        .endpoint:hover { border-color: #3d4460; }
+
+        .endpoint-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.875rem 1.25rem;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s;
+        }
+
+        .endpoint-header:hover { background: var(--surface-2); }
+
+        .method-badge {
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            min-width: 52px;
+            text-align: center;
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+
+        .method-badge.get { background: var(--get-bg); color: var(--get); border: 1px solid var(--get-border); }
+        .method-badge.post { background: var(--post-bg); color: var(--post); border: 1px solid var(--post-border); }
+        .method-badge.put { background: var(--put-bg); color: var(--put); border: 1px solid var(--put-border); }
+        .method-badge.delete { background: var(--delete-bg); color: var(--delete); border: 1px solid var(--delete-border); }
+
+        .endpoint-path {
+            font-family: var(--mono);
+            font-size: 0.85rem;
+            font-weight: 500;
+            flex: 1;
+        }
+
+        .endpoint-path .param {
+            color: var(--accent);
+        }
+
+        .endpoint-desc {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-left: auto;
+            white-space: nowrap;
+        }
+
+        .endpoint-chevron {
+            color: var(--text-dim);
+            transition: transform 0.25s;
+            font-size: 0.75rem;
+            flex-shrink: 0;
+        }
+
+        .endpoint.open .endpoint-chevron { transform: rotate(90deg); }
+
+        .endpoint-body {
+            display: none;
+            padding: 1.25rem;
+            border-top: 1px solid var(--border);
+            background: var(--bg);
+        }
+
+        .endpoint.open .endpoint-body { display: block; }
+
+        .endpoint-body p {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
+        }
+
+        /* ── Params / Body / Response ── */
+        .detail-section {
+            margin-bottom: 1.25rem;
+        }
+
+        .detail-title {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            margin-bottom: 0.6rem;
+        }
+
+        .param-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+        }
+
+        .param-table th {
+            text-align: left;
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-dim);
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+        }
+
+        .param-table td {
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+
+        .param-table tr:last-child td { border-bottom: none; }
+
+        .param-name {
+            font-family: var(--mono);
+            font-weight: 600;
+            color: var(--accent);
+            font-size: 0.8rem;
+        }
+
+        .param-type {
+            font-family: var(--mono);
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            background: var(--surface-2);
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+        }
+
+        .param-required {
+            font-size: 0.65rem;
+            color: var(--delete);
+            font-weight: 700;
+        }
+
+        /* ── Code Block ── */
+        .code-block {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0.75rem;
+            background: var(--surface-2);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .code-label {
+            font-size: 0.68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-dim);
+        }
+
+        .code-status {
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .code-status.s200 { background: var(--get-bg); color: var(--get); }
+        .code-status.s400 { background: var(--put-bg); color: var(--put); }
+        .code-status.s401 { background: var(--delete-bg); color: var(--delete); }
+        .code-status.s404 { background: var(--delete-bg); color: var(--delete); }
+        .code-status.s409 { background: var(--put-bg); color: var(--put); }
+        .code-status.s500 { background: var(--delete-bg); color: var(--delete); }
+
+        pre {
+            padding: 1rem;
+            font-family: var(--mono);
+            font-size: 0.78rem;
+            line-height: 1.7;
+            overflow-x: auto;
+            color: var(--text);
+        }
+
+        pre .key { color: var(--accent); }
+        pre .str { color: var(--get); }
+        pre .num { color: var(--put); }
+        pre .bool { color: #c792ea; }
+        pre .null { color: var(--text-dim); }
+
+        /* ── Try It ── */
+        .try-it {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .try-it-title {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            margin-bottom: 0.6rem;
+        }
+
+        .try-input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .try-input-label {
+            font-size: 0.75rem;
+            font-family: var(--mono);
+            color: var(--accent);
+        }
+
+        .try-input {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .try-input:focus { border-color: var(--accent); }
+
+        textarea.try-input {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .try-btn {
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            padding: 0.55rem 1.25rem;
+            border-radius: 6px;
+            font-family: var(--sans);
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .try-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+        .try-btn:active { transform: scale(0.98); }
+
+        .try-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .try-response {
+            margin-top: 0.75rem;
+        }
+
+        .try-response pre {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .try-status {
+            font-family: var(--mono);
+            font-size: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 900px) {
+            .sidebar { display: none; }
+            .main { margin-left: 0; padding: 1.5rem; }
+        }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3d4460; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h1>☕ Cafetería El Trigal</h1>
+                <div class="version">API v1.0</div>
+                <div class="base-url">/api</div>
+            </div>
+            <div class="nav-group">
+                <div class="nav-group-title">Autenticación</div>
+                <a class="nav-item" href="#get-empleados"><span class="nav-method get">GET</span> /empleados</a>
+                <a class="nav-item" href="#post-login"><span class="nav-method post">POST</span> /login</a>
+            </div>
+            <div class="nav-group">
+                <div class="nav-group-title">Mesas</div>
+                <a class="nav-item" href="#get-mesas"><span class="nav-method get">GET</span> /mesas</a>
+                <a class="nav-item" href="#get-mesas-en-uso"><span class="nav-method get">GET</span> /mesas/en-uso</a>
+                <a class="nav-item" href="#post-mesa-abrir"><span class="nav-method post">POST</span> /mesas/:id/abrir</a>
+                <a class="nav-item" href="#post-mesa-ocupar"><span class="nav-method post">POST</span> /mesas/:id/ocupar</a>
+                <a class="nav-item" href="#post-mesa-liberar"><span class="nav-method post">POST</span> /mesas/:id/liberar</a>
+                <a class="nav-item" href="#post-mesa-cerrar"><span class="nav-method post">POST</span> /mesas/:id/cerrar</a>
+            </div>
+            <div class="nav-group">
+                <div class="nav-group-title">Items de Mesa</div>
+                <a class="nav-item" href="#get-items"><span class="nav-method get">GET</span> /mesas/:id/items</a>
+                <a class="nav-item" href="#post-item"><span class="nav-method post">POST</span> /mesas/:id/items</a>
+                <a class="nav-item" href="#put-item"><span class="nav-method put">PUT</span> /mesas/:id/items/:id</a>
+                <a class="nav-item" href="#delete-item"><span class="nav-method delete">DEL</span> /mesas/:id/items/:id</a>
+            </div>
+            <div class="nav-group">
+                <div class="nav-group-title">Artículos</div>
+                <a class="nav-item" href="#get-articulos"><span class="nav-method get">GET</span> /articulos</a>
+                <a class="nav-item" href="#get-favoritos"><span class="nav-method get">GET</span> /favoritos</a>
+            </div>
+            <div class="nav-group">
+                <div class="nav-group-title">Tickets</div>
+                <a class="nav-item" href="#post-ticket"><span class="nav-method post">POST</span> /tickets</a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main">
+            <div class="hero">
+                <h1>☕ API Cafetería El Trigal</h1>
+                <p>API REST para el sistema de gestión de mesas, pedidos y tickets del TPV. Comunicación en tiempo real vía WebSocket.</p>
+            </div>
+
+            <!-- ═══════════════ AUTENTICACIÓN ═══════════════ -->
+            <div class="section">
+                <h2 class="section-title" id="auth-section">🔐 Autenticación</h2>
+
+                <!-- GET /api/empleados -->
+                <div class="endpoint" id="get-empleados">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge get">GET</span>
+                        <span class="endpoint-path">/api/empleados</span>
+                        <span class="endpoint-desc">Listar empleados activos</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Retorna todos los empleados activos que tienen PIN configurado. Se usa para mostrar la pantalla de selección de usuario en el login.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuesta</div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Response</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>[
+  {
+    <span class="key">"IdEmpleado"</span>: <span class="num">1</span>,
+    <span class="key">"Nombre"</span>: <span class="str">"María García"</span>
+  },
+  {
+    <span class="key">"IdEmpleado"</span>: <span class="num">2</span>,
+    <span class="key">"Nombre"</span>: <span class="str">"Carlos López"</span>
+  }
+]</pre>
+                            </div>
+                        </div>
+
+                        <div class="try-it">
+                            <div class="try-it-title">🧪 Probar</div>
+                            <button class="try-btn" onclick="tryRequest(this, 'GET', '/api/empleados')">Ejecutar</button>
+                            <div class="try-response"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- POST /api/login -->
+                <div class="endpoint" id="post-login">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge post">POST</span>
+                        <span class="endpoint-path">/api/login</span>
+                        <span class="endpoint-desc">Autenticar con PIN</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Valida el PIN de un empleado. Retorna los datos del empleado si es correcto.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Request Body</div>
+                            <table class="param-table">
+                                <tr><th>Campo</th><th>Tipo</th><th>Descripción</th></tr>
+                                <tr>
+                                    <td><span class="param-name">idEmpleado</span> <span class="param-required">*</span></td>
+                                    <td><span class="param-type">integer</span></td>
+                                    <td>ID del empleado</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="param-name">pin</span> <span class="param-required">*</span></td>
+                                    <td><span class="param-type">string</span></td>
+                                    <td>PIN de 4 dígitos</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuestas</div>
+                            <div class="code-block" style="margin-bottom: 0.5rem;">
+                                <div class="code-header">
+                                    <span class="code-label">Éxito</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>{
+  <span class="key">"success"</span>: <span class="bool">true</span>,
+  <span class="key">"empleado"</span>: {
+    <span class="key">"id"</span>: <span class="num">1</span>,
+    <span class="key">"nombre"</span>: <span class="str">"María García"</span>
+  }
+}</pre>
+                            </div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">PIN incorrecto</span>
+                                    <span class="code-status s401">401</span>
+                                </div>
+                                <pre>{
+  <span class="key">"success"</span>: <span class="bool">false</span>,
+  <span class="key">"error"</span>: <span class="str">"PIN incorrecto"</span>
+}</pre>
+                            </div>
+                        </div>
+
+                        <div class="try-it">
+                            <div class="try-it-title">🧪 Probar</div>
+                            <div class="try-input-group">
+                                <label class="try-input-label">Body (JSON)</label>
+                                <textarea class="try-input" id="login-body">{
+  "idEmpleado": 1,
+  "pin": "1234"
+}</textarea>
+                            </div>
+                            <button class="try-btn" onclick="tryRequest(this, 'POST', '/api/login', 'login-body')">Ejecutar</button>
+                            <div class="try-response"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════ MESAS ═══════════════ -->
+            <div class="section">
+                <h2 class="section-title" id="mesas-section">🪑 Mesas</h2>
+
+                <!-- GET /api/mesas -->
+                <div class="endpoint" id="get-mesas">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge get">GET</span>
+                        <span class="endpoint-path">/api/mesas</span>
+                        <span class="endpoint-desc">Listar todas las mesas</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Retorna todas las mesas (clientes con padre '0002') con su estado actual, incluyendo si tienen ticket activo, número de items y total.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuesta</div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Response</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>[
+  {
+    <span class="key">"id"</span>: <span class="str">"0003"</span>,
+    <span class="key">"idCliente"</span>: <span class="str">"0003"</span>,
+    <span class="key">"nombre"</span>: <span class="str">"Mesa 1"</span>,
+    <span class="key">"ocupada"</span>: <span class="bool">true</span>,
+    <span class="key">"idTicket"</span>: <span class="num">1542</span>,
+    <span class="key">"numItems"</span>: <span class="num">3</span>,
+    <span class="key">"total"</span>: <span class="num">12.50</span>
+  }
+]</pre>
+                            </div>
+                        </div>
+
+                        <div class="try-it">
+                            <div class="try-it-title">🧪 Probar</div>
+                            <button class="try-btn" onclick="tryRequest(this, 'GET', '/api/mesas')">Ejecutar</button>
+                            <div class="try-response"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GET /api/mesas/en-uso -->
+                <div class="endpoint" id="get-mesas-en-uso">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge get">GET</span>
+                        <span class="endpoint-path">/api/mesas/en-uso</span>
+                        <span class="endpoint-desc">Mesas en uso por empleados</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Retorna un mapa de las mesas actualmente abiertas por empleados (bloqueo optimista para evitar que dos camareros editen la misma mesa).</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuesta</div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Response</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>{
+  <span class="key">"0003"</span>: {
+    <span class="key">"idEmpleado"</span>: <span class="num">1</span>,
+    <span class="key">"nombre"</span>: <span class="str">"María García"</span>,
+    <span class="key">"desde"</span>: <span class="str">"2025-02-06T10:30:00.000Z"</span>
+  }
+}</pre>
+                            </div>
+                        </div>
+
+                        <div class="try-it">
+                            <div class="try-it-title">🧪 Probar</div>
+                            <button class="try-btn" onclick="tryRequest(this, 'GET', '/api/mesas/en-uso')">Ejecutar</button>
+                            <div class="try-response"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- POST /api/mesas/:idCliente/abrir -->
+                <div class="endpoint" id="post-mesa-abrir">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge post">POST</span>
+                        <span class="endpoint-path">/api/mesas/<span class="param">:idCliente</span>/abrir</span>
+                        <span class="endpoint-desc">Abrir mesa</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Consulta si existe un ticket activo para la mesa. No crea ticket nuevo, solo retorna el estado actual.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Parámetros de Ruta</div>
+                            <table class="param-table">
+                                <tr><th>Param</th><th>Tipo</th><th>Descripción</th></tr>
+                                <tr>
+                                    <td><span class="param-name">idCliente</span> <span class="param-required">*</span></td>
+                                    <td><span class="param-type">string</span></td>
+                                    <td>ID del cliente/mesa (ej: "0003")</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuesta</div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Response</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>{
+  <span class="key">"success"</span>: <span class="bool">true</span>,
+  <span class="key">"idCliente"</span>: <span class="str">"0003"</span>,
+  <span class="key">"idTicket"</span>: <span class="num">1542</span>,
+  <span class="key">"tieneTicket"</span>: <span class="bool">true</span>
+}</pre>
+                            </div>
+                        </div>
+
+                        <div class="try-it">
+                            <div class="try-it-title">🧪 Probar</div>
+                            <div class="try-input-group">
+                                <label class="try-input-label">idCliente</label>
+                                <input class="try-input" id="abrir-id" value="0003">
+                            </div>
+                            <button class="try-btn" onclick="tryRequest(this, 'POST', '/api/mesas/' + document.getElementById('abrir-id').value + '/abrir')">Ejecutar</button>
+                            <div class="try-response"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- POST /api/mesas/:idCliente/ocupar -->
+                <div class="endpoint" id="post-mesa-ocupar">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge post">POST</span>
+                        <span class="endpoint-path">/api/mesas/<span class="param">:idCliente</span>/ocupar</span>
+                        <span class="endpoint-desc">Bloquear mesa para edición</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Marca una mesa como "en uso" por un empleado. Retorna 409 si otro empleado ya la tiene abierta. Notifica por WebSocket.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Request Body</div>
+                            <table class="param-table">
+                                <tr><th>Campo</th><th>Tipo</th><th>Descripción</th></tr>
+                                <tr>
+                                    <td><span class="param-name">idEmpleado</span> <span class="param-required">*</span></td>
+                                    <td><span class="param-type">integer</span></td>
+                                    <td>ID del empleado que ocupa la mesa</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="param-name">nombreEmpleado</span> <span class="param-required">*</span></td>
+                                    <td><span class="param-type">string</span></td>
+                                    <td>Nombre del empleado</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuestas</div>
+                            <div class="code-block" style="margin-bottom: 0.5rem;">
+                                <div class="code-header">
+                                    <span class="code-label">Éxito</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>{ <span class="key">"success"</span>: <span class="bool">true</span> }</pre>
+                            </div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Mesa ya en uso</span>
+                                    <span class="code-status s409">409</span>
+                                </div>
+                                <pre>{
+  <span class="key">"success"</span>: <span class="bool">false</span>,
+  <span class="key">"error"</span>: <span class="str">"Mesa en uso"</span>,
+  <span class="key">"empleado"</span>: <span class="str">"Carlos López"</span>
+}</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- POST /api/mesas/:idCliente/liberar -->
+                <div class="endpoint" id="post-mesa-liberar">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge post">POST</span>
+                        <span class="endpoint-path">/api/mesas/<span class="param">:idCliente</span>/liberar</span>
+                        <span class="endpoint-desc">Liberar mesa</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Libera el bloqueo de la mesa. Solo el empleado que la ocupó puede liberarla. Notifica por WebSocket.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Request Body</div>
+                            <table class="param-table">
+                                <tr><th>Campo</th><th>Tipo</th><th>Descripción</th></tr>
+                                <tr>
+                                    <td><span class="param-name">idEmpleado</span> <span class="param-required">*</span></td>
+                                    <td><span class="param-type">integer</span></td>
+                                    <td>ID del empleado que libera</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuesta</div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Response</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>{ <span class="key">"success"</span>: <span class="bool">true</span> }</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- POST /api/mesas/:idCliente/cerrar -->
+                <div class="endpoint" id="post-mesa-cerrar">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge post">POST</span>
+                        <span class="endpoint-path">/api/mesas/<span class="param">:idCliente</span>/cerrar</span>
+                        <span class="endpoint-desc">Cerrar mesa (limpiar)</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Elimina el ticket activo y todas sus líneas de la base de datos. La mesa queda libre. ⚠️ Acción destructiva.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Parámetros de Ruta</div>
+                            <table class="param-table">
+                                <tr><th>Param</th><th>Tipo</th><th>Descripción</th></tr>
+                                <tr>
+                                    <td><span class="param-name">idCliente</span> <span class="param-required">*</span></td>
+                                    <td><span class="param-type">string</span></td>
+                                    <td>ID del cliente/mesa</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuesta</div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Response</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>{ <span class="key">"success"</span>: <span class="bool">true</span> }</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════ ITEMS DE MESA ═══════════════ -->
+            <div class="section">
+                <h2 class="section-title" id="items-section">📋 Items de Mesa</h2>
+
+                <!-- GET /api/mesas/:idCliente/items -->
+                <div class="endpoint" id="get-items">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge get">GET</span>
+                        <span class="endpoint-path">/api/mesas/<span class="param">:idCliente</span>/items</span>
+                        <span class="endpoint-desc">Obtener items del pedido</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Retorna las líneas del ticket más reciente de la mesa, con nombre del artículo, cantidad y precio.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuesta</div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Response</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>[
+  {
+    <span class="key">"id"</span>: <span class="str">"CAFE01"</span>,
+    <span class="key">"nombre"</span>: <span class="str">"Café con leche"</span>,
+    <span class="key">"cantidad"</span>: <span class="num">2</span>,
+    <span class="key">"precio"</span>: <span class="num">1.80</span>
+  },
+  {
+    <span class="key">"id"</span>: <span class="str">"TOST01"</span>,
+    <span class="key">"nombre"</span>: <span class="str">"Tostada mixta"</span>,
+    <span class="key">"cantidad"</span>: <span class="num">1</span>,
+    <span class="key">"precio"</span>: <span class="num">3.50</span>
+  }
+]</pre>
+                            </div>
+                        </div>
+
+                        <div class="try-it">
+                            <div class="try-it-title">🧪 Probar</div>
+                            <div class="try-input-group">
+                                <label class="try-input-label">idCliente</label>
+                                <input class="try-input" id="items-get-id" value="0003">
+                            </div>
+                            <button class="try-btn" onclick="tryRequest(this, 'GET', '/api/mesas/' + document.getElementById('items-get-id').value + '/items')">Ejecutar</button>
+                            <div class="try-response"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- POST /api/mesas/:idCliente/items -->
+                <div class="endpoint" id="post-item">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge post">POST</span>
+                        <span class="endpoint-path">/api/mesas/<span class="param">:idCliente</span>/items</span>
+                        <span class="endpoint-desc">Añadir producto al pedido</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Añade un artículo al ticket de la mesa. Si no existe ticket, crea uno nuevo automáticamente usando el SP <code>pTPV_Crear_Ticket_Comandas</code>. Notifica por WebSocket.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Request Body</div>
+                            <table class="param-table">
+                                <tr><th>Campo</th><th>Tipo</th><th>Descripción</th></tr>
+                                <tr>
+                                    <td><span class="param-name">productoId</span> <span class="param-required">*</span></td>
+                                    <td><span class="param-type">string</span></td>
+                                    <td>ID del artículo</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="param-name">idEmpleado</span></td>
+                                    <td><span class="param-type">integer</span></td>
+                                    <td>ID del empleado (para crear ticket si es necesario)</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="param-name">cantidad</span></td>
+                                    <td><span class="param-type">number</span></td>
+                                    <td>Cantidad a añadir (default: 1)</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuestas</div>
+                            <div class="code-block" style="margin-bottom: 0.5rem;">
+                                <div class="code-header">
+                                    <span class="code-label">Éxito</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>{
+  <span class="key">"success"</span>: <span class="bool">true</span>,
+  <span class="key">"total"</span>: <span class="num">15.30</span>,
+  <span class="key">"idTicket"</span>: <span class="num">1542</span>
+}</pre>
+                            </div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Artículo no encontrado</span>
+                                    <span class="code-status s404">404</span>
+                                </div>
+                                <pre>{ <span class="key">"error"</span>: <span class="str">"Artículo no encontrado"</span> }</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PUT /api/mesas/:idCliente/items/:itemId/cantidad -->
+                <div class="endpoint" id="put-item">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge put">PUT</span>
+                        <span class="endpoint-path">/api/mesas/<span class="param">:idCliente</span>/items/<span class="param">:itemId</span>/cantidad</span>
+                        <span class="endpoint-desc">Actualizar cantidad</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Actualiza la cantidad de un artículo en el pedido. Recalcula el total de la línea automáticamente.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Request Body</div>
+                            <table class="param-table">
+                                <tr><th>Campo</th><th>Tipo</th><th>Descripción</th></tr>
+                                <tr>
+                                    <td><span class="param-name">cantidad</span> <span class="param-required">*</span></td>
+                                    <td><span class="param-type">number</span></td>
+                                    <td>Nueva cantidad</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuesta</div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Response</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>{ <span class="key">"success"</span>: <span class="bool">true</span> }</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DELETE /api/mesas/:idCliente/items/:productoId -->
+                <div class="endpoint" id="delete-item">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge delete">DELETE</span>
+                        <span class="endpoint-path">/api/mesas/<span class="param">:idCliente</span>/items/<span class="param">:productoId</span></span>
+                        <span class="endpoint-desc">Eliminar item del pedido</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Reduce la cantidad del artículo en 1. Si la cantidad llega a 0, elimina la línea completamente. Notifica por WebSocket.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Parámetros de Ruta</div>
+                            <table class="param-table">
+                                <tr><th>Param</th><th>Tipo</th><th>Descripción</th></tr>
+                                <tr>
+                                    <td><span class="param-name">idCliente</span> <span class="param-required">*</span></td>
+                                    <td><span class="param-type">string</span></td>
+                                    <td>ID del cliente/mesa</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="param-name">productoId</span> <span class="param-required">*</span></td>
+                                    <td><span class="param-type">string</span></td>
+                                    <td>ID del artículo a eliminar</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuesta</div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Response</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>{ <span class="key">"success"</span>: <span class="bool">true</span> }</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════ ARTÍCULOS ═══════════════ -->
+            <div class="section">
+                <h2 class="section-title" id="articulos-section">🛒 Artículos</h2>
+
+                <!-- GET /api/articulos -->
+                <div class="endpoint" id="get-articulos">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge get">GET</span>
+                        <span class="endpoint-path">/api/articulos</span>
+                        <span class="endpoint-desc">Listar artículos del TPV</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Retorna todos los artículos configurados para la caja del TPV, agrupados por familia, con sus precios de la lista 0.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuesta</div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Response</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>[
+  {
+    <span class="key">"iDaRTICULO"</span>: <span class="str">"CAFE01"</span>,
+    <span class="key">"DESCRIP"</span>: <span class="str">"Café con leche"</span>,
+    <span class="key">"DESCRIPFAMILIA"</span>: <span class="str">"Cafés"</span>,
+    <span class="key">"PRECIO"</span>: <span class="num">1.80</span>
+  }
+]</pre>
+                            </div>
+                        </div>
+
+                        <div class="try-it">
+                            <div class="try-it-title">🧪 Probar</div>
+                            <button class="try-btn" onclick="tryRequest(this, 'GET', '/api/articulos')">Ejecutar</button>
+                            <div class="try-response"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GET /api/favoritos -->
+                <div class="endpoint" id="get-favoritos">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge get">GET</span>
+                        <span class="endpoint-path">/api/favoritos</span>
+                        <span class="endpoint-desc">Artículos favoritos</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Retorna los artículos marcados como favoritos para la caja del TPV. Solo incluye artículos con precio válido.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuesta</div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Response</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>[
+  {
+    <span class="key">"IdArticulo"</span>: <span class="str">"CAFE01"</span>,
+    <span class="key">"iDaRTICULO"</span>: <span class="str">"CAFE01"</span>,
+    <span class="key">"DESCRIP"</span>: <span class="str">"Café con leche"</span>,
+    <span class="key">"DESCRIPFAMILIA"</span>: <span class="str">"Cafés"</span>,
+    <span class="key">"PRECIO"</span>: <span class="num">1.80</span>
+  }
+]</pre>
+                            </div>
+                        </div>
+
+                        <div class="try-it">
+                            <div class="try-it-title">🧪 Probar</div>
+                            <button class="try-btn" onclick="tryRequest(this, 'GET', '/api/favoritos')">Ejecutar</button>
+                            <div class="try-response"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════ TICKETS ═══════════════ -->
+            <div class="section">
+                <h2 class="section-title" id="tickets-section">🎫 Tickets</h2>
+
+                <!-- POST /api/tickets -->
+                <div class="endpoint" id="post-ticket">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge post">POST</span>
+                        <span class="endpoint-path">/api/tickets</span>
+                        <span class="endpoint-desc">Procesar ticket de mesa</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Busca el ticket existente para un cliente, verifica que tenga items y retorna su información. El ticket ya existe en la BD porque se crea automáticamente al añadir el primer producto.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Request Body</div>
+                            <table class="param-table">
+                                <tr><th>Campo</th><th>Tipo</th><th>Descripción</th></tr>
+                                <tr>
+                                    <td><span class="param-name">idCliente</span> <span class="param-required">*</span></td>
+                                    <td><span class="param-type">string</span></td>
+                                    <td>ID del cliente/mesa</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Respuestas</div>
+                            <div class="code-block" style="margin-bottom: 0.5rem;">
+                                <div class="code-header">
+                                    <span class="code-label">Éxito</span>
+                                    <span class="code-status s200">200 OK</span>
+                                </div>
+                                <pre>{
+  <span class="key">"success"</span>: <span class="bool">true</span>,
+  <span class="key">"IdTicket"</span>: <span class="num">1542</span>,
+  <span class="key">"Total"</span>: <span class="num">15.30</span>
+}</pre>
+                            </div>
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">Sin ticket/items</span>
+                                    <span class="code-status s400">400</span>
+                                </div>
+                                <pre>{ <span class="key">"error"</span>: <span class="str">"No hay ticket para este cliente"</span> }</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════ WEBSOCKET ═══════════════ -->
+            <div class="section">
+                <h2 class="section-title" id="ws-section">⚡ WebSocket</h2>
+
+                <div class="endpoint" style="border-color: var(--accent);">
+                    <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                        <span class="method-badge" style="background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(108,156,255,0.3);">WS</span>
+                        <span class="endpoint-path">wss://<span class="param">{host}</span>:<span class="param">{port}</span></span>
+                        <span class="endpoint-desc">Eventos en tiempo real</span>
+                        <span class="endpoint-chevron">▶</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Conexión WebSocket para recibir notificaciones en tiempo real cuando cambian las mesas. Se reconecta automáticamente cada 3 segundos si se pierde la conexión.</p>
+
+                        <div class="detail-section">
+                            <div class="detail-title">Eventos</div>
+
+                            <div class="code-block" style="margin-bottom: 0.5rem;">
+                                <div class="code-header">
+                                    <span class="code-label">mesa_actualizada</span>
+                                    <span class="code-status s200">evento</span>
+                                </div>
+                                <pre>{
+  <span class="key">"tipo"</span>: <span class="str">"mesa_actualizada"</span>,
+  <span class="key">"idCliente"</span>: <span class="str">"0003"</span>
+}</pre>
+                            </div>
+
+                            <div class="code-block" style="margin-bottom: 0.5rem;">
+                                <div class="code-header">
+                                    <span class="code-label">mesa_en_uso</span>
+                                    <span class="code-status s200">evento</span>
+                                </div>
+                                <pre>{
+  <span class="key">"tipo"</span>: <span class="str">"mesa_en_uso"</span>,
+  <span class="key">"idCliente"</span>: <span class="str">"0003"</span>,
+  <span class="key">"empleado"</span>: <span class="str">"María García"</span>,
+  <span class="key">"idEmpleado"</span>: <span class="num">1</span>
+}</pre>
+                            </div>
+
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <span class="code-label">mesa_liberada</span>
+                                    <span class="code-status s200">evento</span>
+                                </div>
+                                <pre>{
+  <span class="key">"tipo"</span>: <span class="str">"mesa_liberada"</span>,
+  <span class="key">"idCliente"</span>: <span class="str">"0003"</span>
+}</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        function toggleEndpoint(header) {
+            header.closest('.endpoint').classList.toggle('open');
+        }
+
+        async function tryRequest(btn, method, url, bodyId) {
+            const responseDiv = btn.parentElement.querySelector('.try-response');
+            btn.disabled = true;
+            btn.textContent = 'Cargando...';
+
+            try {
+                const options = { method, headers: {} };
+
+                if (bodyId) {
+                    const textarea = document.getElementById(bodyId);
+                    options.headers['Content-Type'] = 'application/json';
+                    options.body = textarea.value;
+                }
+
+                const start = performance.now();
+                const response = await fetch(url, options);
+                const elapsed = Math.round(performance.now() - start);
+                const data = await response.json();
+
+                const statusColor = response.ok ? 'var(--get)' : 'var(--delete)';
+
+                responseDiv.innerHTML = `
+                    <div class="try-status" style="color: ${statusColor}">
+                        ${response.status} ${response.statusText} — ${elapsed}ms
+                    </div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-label">Response</span>
+                            <span class="code-status ${response.ok ? 's200' : 's500'}">${response.status}</span>
+                        </div>
+                        <pre>${syntaxHighlight(JSON.stringify(data, null, 2))}</pre>
+                    </div>
+                `;
+            } catch (err) {
+                responseDiv.innerHTML = `
+                    <div class="try-status" style="color: var(--delete)">
+                        Error: ${err.message}
+                    </div>
+                    <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 0.5rem;">
+                        Asegúrate de que el servidor está corriendo y esta página se sirve desde el mismo origen.
+                    </p>
+                `;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Ejecutar';
+            }
+        }
+
+        function syntaxHighlight(json) {
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+                let cls = 'num';
+                if (/^"/.test(match)) {
+                    cls = /:$/.test(match) ? 'key' : 'str';
+                } else if (/true|false/.test(match)) {
+                    cls = 'bool';
+                } else if (/null/.test(match)) {
+                    cls = 'null';
+                }
+                // Remove trailing colon from keys for display
+                if (cls === 'key') {
+                    return `<span class="${cls}">${match.slice(0, -1)}</span>:`;
+                }
+                return `<span class="${cls}">${match}</span>`;
+            });
+        }
+
+        // Smooth scroll for sidebar links
+        document.querySelectorAll('.nav-item').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const id = link.getAttribute('href').slice(1);
+                const el = document.getElementById(id);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Open the endpoint
+                    if (!el.classList.contains('open')) {
+                        el.classList.add('open');
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

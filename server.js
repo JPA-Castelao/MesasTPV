@@ -39,9 +39,10 @@ app.use(express.static('.', {
 const dbConfig = {
     ...config.database,
     pool: {
-        min: 2,                  // Mantener mínimo 2 conexiones siempre abiertas
-        max: 10,                 // Máximo 10 conexiones
-        idleTimeoutMillis: 600000  // 10 minutos antes de cerrar conexión inactiva (en lugar de 30s por defecto)
+        min: 2,                    // Mantener mínimo 2 conexiones siempre abiertas
+        max: 10,                   // Máximo 10 conexiones
+        idleTimeoutMillis: 300000, // 5 minutos antes de cerrar conexión inactiva
+        acquireTimeoutMillis: 15000 // Timeout al adquirir conexión del pool
     },
     options: {
         ...config.database.options,
@@ -49,6 +50,18 @@ const dbConfig = {
         trustServerCertificate: config.database.options?.trustServerCertificate !== undefined
             ? config.database.options.trustServerCertificate
             : true
+    },
+    connectionTimeout: 10000,
+    requestTimeout: 15000,
+    // CRÍTICO: Mantener el socket TCP vivo para evitar conexiones muertas
+    beforeConnect: (conn) => {
+        conn.once('connect', (err) => {
+            if (!err) {
+                conn.on('socket', (socket) => {
+                    socket.setKeepAlive(true, 30000); // Ping TCP cada 30 segundos
+                });
+            }
+        });
     }
 };
 
@@ -61,6 +74,31 @@ let pool;
 // Estado en memoria de los pedidos por mesa (IdCliente)
 const pedidosMesas = new Map();
 
+// =============================================
+// CACHÉ EN MEMORIA - Evitar queries repetidas
+// =============================================
+
+// Caché del IdAlmacen (no cambia nunca)
+let idAlmacenCache = null;
+
+async function getIdAlmacen(pool) {
+    if (idAlmacenCache !== null) return idAlmacenCache;
+    const result = await pool.request()
+        .input('IdCaja', sql.Int, TPV_CONFIG.IdCaja)
+        .query('SELECT IdAlmacen FROM Cajas WHERE IdCaja = @IdCaja');
+    idAlmacenCache = result.recordset[0]?.IdAlmacen || 0;
+    console.log('✅ IdAlmacen cacheado:', idAlmacenCache);
+    return idAlmacenCache;
+}
+
+// Caché de mesas (TTL corto para mantener datos frescos)
+let cacheMesas = { data: null, timestamp: 0 };
+const CACHE_MESAS_TTL = 10000; // 10 segundos
+
+function invalidarCacheMesas() {
+    cacheMesas = { data: null, timestamp: 0 };
+}
+
 // Función para obtener conexión
 async function getConnection() {
     try {
@@ -68,6 +106,9 @@ async function getConnection() {
             console.log('Creando nuevo pool de conexiones...');
             pool = await sql.connect(dbConfig);
             console.log('✅ Pool de conexiones creado exitosamente');
+
+            // Cachear IdAlmacen al inicio
+            await getIdAlmacen(pool);
 
             // Iniciar keep-alive después de crear el pool
             iniciarKeepAlive();
@@ -90,24 +131,48 @@ function iniciarKeepAlive() {
         return; // Ya está iniciado
     }
 
-    console.log('🔥 Iniciando keep-alive cada 3 minutos...');
+    console.log('🔥 Iniciando keep-alive cada 2 minutos...');
 
-    // Ejecutar keep-alive cada 3 minutos
+    // Ejecutar keep-alive cada 2 minutos (más frecuente para servidor con poca RAM)
     keepAliveInterval = setInterval(async () => {
         try {
             if (!pool) return;
 
-            // Query ligera para mantener conexión activa
+            // Query 1: Mantener conexión activa
             await pool.request().query('SELECT 1 as KeepAlive');
 
-            // Query para mantener procedimientos compilados en caché
-            // Esto ejecuta el SP con parámetros dummy para compilarlo
-            try {
-                await pool.request().query(`
-                    DECLARE @oXML XML, @iXML NVARCHAR(MAX);
-                    SET @iXML = '<data><IdCaja>${TPV_CONFIG.IdCaja}</IdCaja><IdCliente>0000</IdCliente><IdEmpleado>0</IdEmpleado><IdEmpresa>0</IdEmpresa></data>';
-                    EXEC pTPV_Crear_Ticket_Comandas @iXML = @iXML, @oXML = @oXML OUTPUT;
+            // Query 2: Mantener caliente el plan de consulta de mesas (la más usada)
+            await pool.request()
+                .input('Padre', sql.VarChar(50), '0002')
+                .query(`
+                    SELECT TOP 1 c.IdCliente, c.cliente
+                    FROM Clientes_Datos c
+                    WHERE c.padre = @Padre
                 `);
+
+            // Query 3: Mantener caliente el plan de búsqueda de tickets
+            await pool.request()
+                .input('IdCliente', sql.VarChar(50), '0000')
+                .query('SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC');
+
+            // Query 4: Mantener caliente el plan de artículos
+            await pool.request()
+                .input('IdArticulo', sql.VarChar(50), '0000')
+                .query(`
+                    SELECT TOP 1 a.IdArticulo, a.IdIva, p.PRECIO 
+                    FROM Articulos a 
+                    LEFT JOIN VListas_Precios p ON a.IdArticulo = p.IdArticulo AND p.IdLista = 0
+                    WHERE a.IdArticulo = @IdArticulo
+                `);
+
+            // Query 5: Intentar mantener el SP compilado
+            try {
+                await pool.request()
+                    .input('iXML', sql.NVarChar(sql.MAX), `<data><IdCaja>${TPV_CONFIG.IdCaja}</IdCaja><IdCliente>0000</IdCliente><IdEmpleado>0</IdEmpleado><IdEmpresa>0</IdEmpresa></data>`)
+                    .query(`
+                        DECLARE @oXML XML;
+                        EXEC pTPV_Crear_Ticket_Comandas @iXML = @iXML, @oXML = @oXML OUTPUT;
+                    `);
             } catch (spError) {
                 // Ignorar errores del SP dummy, solo queremos compilarlo
             }
@@ -116,7 +181,7 @@ function iniciarKeepAlive() {
         } catch (err) {
             console.error('⚠️ Error en keep-alive:', err.message);
         }
-    }, 3 * 60 * 1000); // 3 minutos
+    }, 2 * 60 * 1000); // 2 minutos
 }
 
 // Limpiar keep-alive al cerrar
@@ -249,6 +314,12 @@ app.post('/api/login', async (req, res) => {
 // Obtener todas las mesas (clientes con padre = '0002')
 app.get('/api/mesas', async (req, res) => {
     try {
+        // Usar caché si está fresco
+        if (cacheMesas.data && (Date.now() - cacheMesas.timestamp) < CACHE_MESAS_TTL) {
+            res.set('Cache-Control', 'private, max-age=10');
+            return res.json(cacheMesas.data);
+        }
+
         const pool = await getConnection();
         console.log('Obteniendo mesas desde Clientes_Datos...');
 
@@ -287,6 +358,9 @@ app.get('/api/mesas', async (req, res) => {
         }));
 
         console.log('Mesas obtenidas:', mesas.length);
+
+        // Guardar en caché
+        cacheMesas = { data: mesas, timestamp: Date.now() };
 
         res.set('Cache-Control', 'private, max-age=10');
         res.json(mesas);
@@ -448,11 +522,8 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
             idTicket = await crearTicketConSP(pool, idCliente, idEmpleado);
         }
 
-        // Obtener IdAlmacen de la caja
-        const cajaResult = await pool.request()
-            .input('IdCaja', sql.Int, TPV_CONFIG.IdCaja)
-            .query(`SELECT IdAlmacen FROM Cajas WHERE IdCaja = @IdCaja`);
-        const idAlmacen = cajaResult.recordset[0]?.IdAlmacen || 0;
+        // Obtener IdAlmacen desde caché (no hace query si ya está cacheado)
+        const idAlmacen = await getIdAlmacen(pool);
 
         // TRANSACCIÓN para evitar condiciones de carrera al obtener IdLinea
         const transaction = new sql.Transaction(pool);
@@ -507,6 +578,10 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
             .query(`SELECT ISNULL(SUM(Total), 0) as total FROM Tickets_Lineas WHERE IdTicket = @IdTicket`);
 
         console.log('Item agregado');
+
+        // Invalidar caché de mesas (los datos cambiaron)
+        invalidarCacheMesas();
+
         res.json({ success: true, total: totalResult.recordset[0].total, idTicket });
 
         // Notificar a todos los clientes WebSocket
@@ -557,6 +632,9 @@ app.put('/api/mesas/:idCliente/items/:itemId/cantidad', async (req, res) => {
                 console.log('Cantidad actualizada:', { cantidad, nuevoTotal });
             }
         }
+
+        // Invalidar caché de mesas
+        invalidarCacheMesas();
 
         res.json({ success: true });
 
@@ -617,6 +695,10 @@ app.delete('/api/mesas/:idCliente/items/:productoId', async (req, res) => {
         }
 
         console.log('Item eliminado');
+
+        // Invalidar caché de mesas
+        invalidarCacheMesas();
+
         res.json({ success: true });
 
         // Notificar a todos los clientes WebSocket
@@ -658,6 +740,10 @@ app.post('/api/mesas/:idCliente/cerrar', async (req, res) => {
         }
 
         console.log('Mesa cerrada exitosamente');
+
+        // Invalidar caché de mesas
+        invalidarCacheMesas();
+
         res.json({ success: true });
 
         // Notificar a todos los clientes WebSocket

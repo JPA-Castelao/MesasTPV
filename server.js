@@ -1021,6 +1021,332 @@ app.post('/api/tickets', async (req, res) => {
 });
 
 // =============================================
+// RUTAS API - IMPRESORAS
+// =============================================
+
+// Obtener lista de impresoras activas
+app.get('/api/impresoras', async (req, res) => {
+    try {
+        const pool = await getConnection();
+        console.log('🖨️  Obteniendo impresoras...');
+
+        // Verificar si la tabla existe
+        const tableCheck = await pool.request().query(`
+            SELECT COUNT(*) as tableExists
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_NAME = 'Pers_comandas_impresoras'
+        `);
+
+        if (tableCheck.recordset[0].tableExists === 0) {
+            console.log('⚠️  Tabla Pers_comandas_impresoras no existe. Devolviendo array vacío.');
+            return res.json([]);
+        }
+
+        // Obtener solo impresoras activas
+        const result = await pool.request().query(`
+            SELECT Id, Nombre, IP, Puerto
+            FROM Pers_comandas_impresoras
+            WHERE Activo = 1
+            ORDER BY Nombre
+        `);
+
+        console.log('🖨️  Impresoras obtenidas:', result.recordset.length);
+        res.json(result.recordset);
+    } catch (err) {
+        console.error('❌ Error al obtener impresoras:', err);
+        console.error('❌ Error details:', err.message);
+        // Si hay error, devolver array vacío en lugar de 500
+        res.json([]);
+    }
+});
+
+// Test de conectividad de impresoras
+app.get('/api/impresoras/test', async (req, res) => {
+    try {
+        const pool = await getConnection();
+        const net = require('net');
+
+        // Obtener todas las impresoras activas
+        const result = await pool.request().query(`
+            SELECT Id, Nombre, IP, Puerto
+            FROM Pers_comandas_impresoras
+            WHERE Activo = 1
+            ORDER BY Nombre
+        `);
+
+        const impresoras = result.recordset;
+        const resultados = [];
+
+        // Probar conectividad con cada impresora
+        for (const impresora of impresoras) {
+            const puerto = impresora.Puerto || 9100;
+
+            try {
+                await new Promise((resolve, reject) => {
+                    const client = new net.Socket();
+                    const timeout = setTimeout(() => {
+                        client.destroy();
+                        reject(new Error('Timeout'));
+                    }, 3000);
+
+                    client.connect(puerto, impresora.IP, () => {
+                        clearTimeout(timeout);
+                        client.end();
+                        resolve();
+                    });
+
+                    client.on('close', () => {
+                        resolve();
+                    });
+
+                    client.on('error', (err) => {
+                        clearTimeout(timeout);
+                        client.destroy();
+                        reject(err);
+                    });
+                });
+
+                resultados.push({
+                    id: impresora.Id,
+                    nombre: impresora.Nombre,
+                    ip: impresora.IP,
+                    puerto: puerto,
+                    estado: 'CONECTADA ✅',
+                    disponible: true
+                });
+
+            } catch (err) {
+                resultados.push({
+                    id: impresora.Id,
+                    nombre: impresora.Nombre,
+                    ip: impresora.IP,
+                    puerto: puerto,
+                    estado: `ERROR ❌: ${err.message}`,
+                    disponible: false,
+                    error: err.code || err.message
+                });
+            }
+        }
+
+        res.json(resultados);
+
+    } catch (err) {
+        console.error('❌ Error al probar impresoras:', err);
+        res.status(500).json({ error: 'Error al probar impresoras', details: err.message });
+    }
+});
+
+// Imprimir ticket en impresoras seleccionadas
+app.post('/api/tickets/:idTicket/imprimir', async (req, res) => {
+    console.log('=== IMPRIMIENDO TICKET ===');
+    console.log('IdTicket:', req.params.idTicket);
+    console.log('Impresoras:', req.body.impresoras);
+
+    const idTicket = parseInt(req.params.idTicket);
+    const impresorasIds = req.body.impresoras || [];
+
+    if (!idTicket || impresorasIds.length === 0) {
+        return res.status(400).json({ error: 'Faltan parámetros' });
+    }
+
+    try {
+        const pool = await getConnection();
+        const net = require('net');
+
+        // Obtener información del ticket
+        const ticketResult = await pool.request()
+            .input('IdTicket', sql.Int, idTicket)
+            .query(`
+                SELECT t.IdTicket, t.IdCliente, t.Fecha, c.cliente as NombreMesa
+                FROM Tickets t
+                INNER JOIN Clientes_Datos c ON t.IdCliente = c.IdCliente
+                WHERE t.IdTicket = @IdTicket
+            `);
+
+        if (ticketResult.recordset.length === 0) {
+            return res.status(404).json({ error: 'Ticket no encontrado' });
+        }
+
+        const ticket = ticketResult.recordset[0];
+
+        // Para cada impresora seleccionada
+        const resultados = [];
+        for (const idImpresora of impresorasIds) {
+            try {
+                // Obtener datos de la impresora
+                const impresoraResult = await pool.request()
+                    .input('Id', sql.Int, idImpresora)
+                    .query(`SELECT Nombre, IP, Puerto FROM Pers_comandas_impresoras WHERE Id = @Id`);
+
+                if (impresoraResult.recordset.length === 0) {
+                    resultados.push({ idImpresora, success: false, error: 'Impresora no encontrada' });
+                    continue;
+                }
+
+                const impresora = impresoraResult.recordset[0];
+                const puerto = impresora.Puerto || 9100;
+
+                // Obtener artículos del ticket que corresponden a esta impresora
+                const articulosResult = await pool.request()
+                    .input('IdTicket', sql.Int, idTicket)
+                    .input('IdImpresora', sql.Int, idImpresora)
+                    .query(`
+                        SELECT 
+                            tl.IdLinea,
+                            tl.IdArticulo,
+                            a.DESCRIP as Nombre,
+                            tl.Cantidad,
+                            tl.Precio,
+                            tl.Total,
+                            tl.Observaciones
+                        FROM Tickets_Lineas tl
+                        INNER JOIN ARTICULOS a ON tl.IdArticulo = a.IDARTICULO
+                        INNER JOIN Pers_comandas_impresoras_articulos pia ON tl.IdArticulo = pia.idarticulo AND pia.idimpresora = @IdImpresora
+                        WHERE tl.IdTicket = @IdTicket
+                        ORDER BY tl.IdLinea
+                    `);
+
+                const articulos = articulosResult.recordset;
+
+                if (articulos.length === 0) {
+                    resultados.push({ idImpresora, success: true, mensaje: 'Sin artículos para imprimir' });
+                    continue;
+                }
+
+                // Generar comandos ESC/POS para impresora térmica 80mm
+                const ESC = '\x1B';
+                const GS = '\x1D';
+
+                let comandos = '';
+
+                // Inicializar impresora
+                comandos += ESC + '@';
+
+                // Centrar texto
+                comandos += ESC + 'a' + '\x01';
+
+                // Negrita + tamaño grande
+                comandos += ESC + 'E' + '\x01';
+                comandos += GS + '!' + '\x11';
+                comandos += 'Cafeteria El Trigal\n';
+
+                // Tamaño normal
+                comandos += GS + '!' + '\x00';
+                comandos += ESC + 'E' + '\x00';
+
+                // Información de mesa y fecha
+                comandos += '\n';
+                comandos += `Mesa: ${ticket.NombreMesa}\n`;
+                const fecha = new Date(ticket.Fecha);
+                comandos += `${fecha.toLocaleDateString('es-ES')} ${fecha.toLocaleTimeString('es-ES')}\n`;
+                comandos += '\n';
+
+                // Línea separadora
+                comandos += '------------------------------------------------\n';
+
+                // Align izquierda para artículos
+                comandos += ESC + 'a' + '\x00';
+
+                // Lista de artículos
+                articulos.forEach(art => {
+                    // Cantidad x Nombre
+                    let linea = `${art.Cantidad}x ${art.Nombre}`;
+                    if (linea.length > 48) {
+                        linea = linea.substring(0, 45) + '...';
+                    }
+                    comandos += linea + '\n';
+
+                    // Observaciones si existen
+                    if (art.Observaciones && art.Observaciones.trim()) {
+                        comandos += `  * ${art.Observaciones}\n`;
+                    }
+
+                    comandos += '\n';
+                });
+
+                // Línea separadora
+                comandos += '------------------------------------------------\n';
+
+                // Centrar para el pie
+                comandos += ESC + 'a' + '\x01';
+                comandos += '\n';
+                comandos += `Impresora: ${impresora.Nombre}\n`;
+                comandos += '\n\n\n';
+
+                // Cortar papel
+                comandos += GS + 'V' + '\x41' + '\x03';
+
+                // Enviar a la impresora por red
+                await new Promise((resolve, reject) => {
+                    const client = new net.Socket();
+                    const timeout = setTimeout(() => {
+                        client.destroy();
+                        reject(new Error('Timeout al conectar con impresora'));
+                    }, 5000);
+
+                    client.connect(puerto, impresora.IP, () => {
+                        clearTimeout(timeout);
+                        console.log(`🖨️  Conectado a ${impresora.Nombre} (${impresora.IP}:${puerto})`);
+
+                        // Escribir datos y esperar a que se complete la escritura
+                        client.write(Buffer.from(comandos, 'binary'), (err) => {
+                            if (err) {
+                                client.destroy();
+                                reject(err);
+                                return;
+                            }
+
+                            // Pequeño delay para asegurar que la impresora reciba todos los datos
+                            setTimeout(() => {
+                                client.end(); // Cerrar la conexión correctamente
+                            }, 100);
+                        });
+                    });
+
+                    client.on('data', (data) => {
+                        console.log('Respuesta impresora:', data);
+                    });
+
+                    client.on('close', () => {
+                        console.log(`🖨️  Impresión enviada a ${impresora.Nombre}`);
+                        resolve();
+                    });
+
+                    client.on('error', (err) => {
+                        clearTimeout(timeout);
+                        client.destroy();
+                        reject(err);
+                    });
+                });
+
+                resultados.push({
+                    idImpresora,
+                    success: true,
+                    nombre: impresora.Nombre,
+                    articulos: articulos.length
+                });
+
+            } catch (err) {
+                console.error(`Error al imprimir en impresora ${idImpresora}:`, err);
+                resultados.push({ idImpresora, success: false, error: err.message });
+            }
+        }
+
+        console.log('✅ Resultados de impresión:', resultados);
+        const todosExitosos = resultados.every(r => r.success);
+
+        res.json({
+            success: todosExitosos,
+            resultados
+        });
+
+    } catch (err) {
+        console.error('❌ Error general al imprimir:', err);
+        res.status(500).json({ error: 'Error al imprimir', details: err.message });
+    }
+});
+
+// =============================================
 // SERVIR APLICACIÓN
 // =============================================
 

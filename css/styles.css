@@ -2719,3 +2719,88 @@ body.modal-open {
 #modal-complementos {
     z-index: 10001 !important;
 }
+/* ========== MODAL IMPRESORAS ========== */
+.modal-impresoras-content {
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-impresoras-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--cafe-dark);
+}
+
+.impresoras-lista {
+    padding: 1.5rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.impresora-item {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    background: var(--cafe-light);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 2px solid transparent;
+}
+
+.impresora-item:hover {
+    background: var(--cafe-cream);
+    border-color: var(--cafe-latte);
+}
+
+.impresora-item input[type=\"checkbox\"] {
+    width: 20px;
+    height: 20px;
+    margin-right: 1rem;
+    cursor: pointer;
+    accent-color: var(--cafe-brown);
+}
+
+.impresora-item label {
+    flex: 1;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--cafe-dark);
+}
+
+.impresoras-acciones {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #ddd;
+}
+
+.impresoras-acciones .btn { flex: 1;
+}
+
+.impresoras-empty {
+    padding: 2rem;
+    text-align: center;
+    color: #999;
+    font-style: italic;
+}
+
+@media (max-width: 600px) {
+    .modal-impresoras-content {
+        max-width: 95vw;
+        margin: 1rem;
+    }
+    .impresoras-lista {
+        padding: 1rem;
+        max-height: 50vh;
+    }
+    .impresora-item {
+        padding: 0.75rem;
+    }
+    .impresoras-acciones {
+        padding: 0.75rem 1rem;
+    }
+}

@@ -277,6 +277,23 @@
                 </div>
             </div>
         </div>
+
+        <!-- Modal Selección de Impresoras -->
+        <div id="modal-impresoras" class="modal modal-impresoras">
+            <div class="modal-content modal-impresoras-content">
+                <div class="modal-header">
+                    <h2 class="modal-impresoras-title">Seleccionar Impresoras</h2>
+                    <button class="close close-impresoras" aria-label="Cerrar">&times;</button>
+                </div>
+                <div id="impresoras-lista" class="impresoras-lista">
+                    <!-- Se carga dinámicamente -->
+                </div>
+                <div class="impresoras-acciones">
+                    <button id="btn-cancelar-impresoras" class="btn btn-cancelar">Cancelar</button>
+                    <button id="btn-imprimir-seleccionadas" class="btn btn-confirmar">Imprimir</button>
+                </div>
+            </div>
+        </div>
     </div>
     <script src="js/app.js"></script>
 </body>

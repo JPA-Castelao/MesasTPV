@@ -693,14 +693,31 @@ async function cargarMesas() {
         mesasContainer.innerHTML = '';
 
         data.forEach(mesa => {
+            // Si es la mesa actual, preservar items y idTicket local
+            let items = mesa.items || [];
+            let idTicket = mesa.idTicket;
+            let total = mesa.total || 0;
+
+            if (mesaActual === mesa.idCliente && mesas[mesaActual]) {
+                const mesaLocal = mesas[mesaActual];
+                if (mesaLocal.items && mesaLocal.items.length > 0) {
+                    items = mesaLocal.items;
+                    total = mesaLocal.total; // Preservar total calculado localmente
+                }
+                if (mesaLocal.idTicket) {
+                    idTicket = mesaLocal.idTicket;
+                }
+            }
+
             mesas[mesa.idCliente] = {
                 idCliente: mesa.idCliente,
                 codigo: mesa.codigo,
                 nombre: mesa.nombre,
                 ocupada: mesa.ocupada,
-                items: mesa.items || [],
-                total: mesa.total || 0,
-                horaApertura: mesa.horaApertura
+                items: items,
+                total: total,
+                horaApertura: mesa.horaApertura,
+                idTicket: idTicket
             };
         });
 
@@ -1166,6 +1183,10 @@ async function abrirMesa(idCliente) {
         mesas[idCliente].items = items;
         mesas[idCliente].ocupada = items.length > 0;
         mesas[idCliente].total = items.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+        // Guardar el IdTicket si hay items
+        if (items.length > 0 && items[0].IdTicket) {
+            mesas[idCliente].idTicket = items[0].IdTicket;
+        }
 
         actualizarMesaElement(idCliente);
 
@@ -1292,20 +1313,30 @@ async function agregarProducto(producto) {
             return;
         }
 
+        // DESPUÉS (corregido):
         const data = await response.json();
-        console.log('Producto agregado en servidor. Total:', data.total);
-
-        // Resetear la cantidad a 1 después de agregar
+        console.log('Producto agregado en servidor. Total:', data.total, 'IdTicket:', data.idTicket);
         resetearCantidad();
 
-        // Recargar items desde la BD para mantener sincronía
+        // Asignar idTicket INMEDIATAMENTE desde la respuesta del POST
+        const mesa = mesas[mesaActual];
+        if (data.idTicket) {
+            mesa.idTicket = data.idTicket;
+            console.log('✅ IdTicket asignado:', mesa.idTicket);
+        }
+
         const itemsResponse = await fetch(`${API_BASE}/mesas/${mesaActual}/items`);
         const items = await itemsResponse.json();
 
-        const mesa = mesas[mesaActual];
         mesa.items = items;
         mesa.ocupada = items.length > 0;
         mesa.total = items.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+
+        // Fallback por si no vino en la respuesta POST
+        if (!mesa.idTicket && items.length > 0 && items[0].IdTicket) {
+            mesa.idTicket = items[0].IdTicket;
+            console.log('✅ IdTicket asignado desde items:', mesa.idTicket);
+        }
 
         actualizarItemsPedido();
         actualizarMesaElement(mesaActual);
@@ -1423,22 +1454,10 @@ function actualizarItemsPedido() {
         const btnImprimir = document.createElement('button');
         btnImprimir.className = 'btn btn-imprimir';
         btnImprimir.textContent = '🖨️ Imprimir';
-        btnImprimir.onclick = () => {
-            // Funcionalidad pendiente
-            console.log('Imprimir ticket');
-        };
-
-        const btnImprimirSeparado = document.createElement('button');
-        btnImprimirSeparado.className = 'btn btn-imprimir-separado';
-        btnImprimirSeparado.textContent = '🖨️ Imprimir Separado';
-        btnImprimirSeparado.onclick = () => {
-            // Funcionalidad pendiente
-            console.log('Imprimir ticket separado');
-        };
+        btnImprimir.onclick = abrirModalImpresoras;
 
         accionesDiv.appendChild(btnLimpiar);
         accionesDiv.appendChild(btnImprimir);
-        accionesDiv.appendChild(btnImprimirSeparado);
 
         const totalDiv = document.querySelector('.pedido-actual .total');
         if (totalDiv) {
@@ -1463,6 +1482,10 @@ async function eliminarItem(productoId) {
         mesa.items = items;
         mesa.ocupada = items.length > 0;
         mesa.total = items.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+        // Guardar el IdTicket si hay items
+        if (items.length > 0 && items[0].IdTicket) {
+            mesa.idTicket = items[0].IdTicket;
+        }
 
         actualizarItemsPedido();
         actualizarMesaElement(mesaActual);
@@ -1843,4 +1866,165 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnCancelar) {
         btnCancelar.addEventListener('click', cerrarModalComplementos);
     }
+
+    // ===== MODAL IMPRESORAS EVENT LISTENERS =====
+    const closeImpresorasBtn = document.querySelector('.close-impresoras');
+    if (closeImpresorasBtn) {
+        closeImpresorasBtn.addEventListener('click', cerrarModalImpresoras);
+    }
+
+    const modalImpresoras = document.getElementById('modal-impresoras');
+    if (modalImpresoras) {
+        modalImpresoras.addEventListener('click', (e) => {
+            if (e.target === modalImpresoras) {
+                cerrarModalImpresoras();
+            }
+        });
+    }
+
+    const btnCancelarImpresoras = document.getElementById('btn-cancelar-impresoras');
+    if (btnCancelarImpresoras) {
+        btnCancelarImpresoras.addEventListener('click', cerrarModalImpresoras);
+    }
+
+    const btnImprimirSeleccionadas = document.getElementById('btn-imprimir-seleccionadas');
+    if (btnImprimirSeleccionadas) {
+        btnImprimirSeleccionadas.addEventListener('click', imprimirSeleccionadas);
+    }
 });
+
+// =============================================
+// MODAL IMPRESORAS - Funciones
+// =============================================
+
+// Abrir modal de impresoras
+async function abrirModalImpresoras() {
+    try {
+        console.log('Abriendo modal de impresoras...');
+
+        // Obtener impresoras del servidor
+        const response = await fetch(`${API_BASE}/impresoras`);
+
+        if (!response.ok) {
+            console.error('Error al obtener impresoras:', response.status);
+            alert('Error al obtener la lista de impresoras');
+            return;
+        }
+
+        const impresoras = await response.json();
+        console.log('Impresoras obtenidas:', impresoras);
+
+        const modalImpresoras = document.getElementById('modal-impresoras');
+        const impresorasLista = document.getElementById('impresoras-lista');
+
+        if (!modalImpresoras || !impresorasLista) {
+            console.error('No se encontraron elementos del DOM para el modal de impresoras');
+            return;
+        }
+
+        impresorasLista.innerHTML = '';
+
+        if (impresoras.length === 0) {
+            impresorasLista.innerHTML = '<div class="impresoras-empty">No hay impresoras configuradas</div>';
+        } else {
+            impresoras.forEach((impresora, index) => {
+                const impresoraItem = document.createElement('div');
+                impresoraItem.className = 'impresora-item';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `impresora-${index}`;
+                checkbox.value = impresora.Id;
+                checkbox.dataset.nombre = impresora.Nombre;
+                checkbox.dataset.ip = impresora.IP;
+                checkbox.dataset.puerto = impresora.Puerto || '9100';
+
+                const label = document.createElement('label');
+                label.htmlFor = `impresora-${index}`;
+                label.textContent = impresora.Nombre;
+
+                impresoraItem.appendChild(checkbox);
+                impresoraItem.appendChild(label);
+
+                // Hacer que todo el item sea clickable
+                impresoraItem.addEventListener('click', (e) => {
+                    if (e.target !== checkbox) {
+                        checkbox.checked = !checkbox.checked;
+                    }
+                });
+
+                impresorasLista.appendChild(impresoraItem);
+            });
+        }
+
+        modalImpresoras.style.display = 'block';
+    } catch (error) {
+        console.error('Error al abrir modal de impresoras:', error);
+        alert('Error al cargar las impresoras');
+    }
+}
+
+// Cerrar modal de impresoras
+function cerrarModalImpresoras() {
+    const modalImpresoras = document.getElementById('modal-impresoras');
+    if (modalImpresoras) {
+        modalImpresoras.style.display = 'none';
+    }
+}
+
+// Imprimir en las impresoras seleccionadas
+async function imprimirSeleccionadas() {
+    try {
+        // Obtener checkboxes seleccionados
+        const checkboxes = document.querySelectorAll('.impresora-item input[type="checkbox"]:checked');
+
+        if (checkboxes.length === 0) {
+            alert('Por favor selecciona al menos una impresora');
+            return;
+        }
+
+        if (!mesaActual) {
+            alert('No hay una mesa activa');
+            return;
+        }
+
+        const mesa = mesas[mesaActual];
+        if (!mesa || !mesa.idTicket) {
+            alert('No hay ticket para imprimir');
+            return;
+        }
+
+        // Recopilar impresoras seleccionadas
+        const impresorasSeleccionadas = [];
+        checkboxes.forEach(checkbox => {
+            impresorasSeleccionadas.push({
+                id: checkbox.value,
+                nombre: checkbox.dataset.nombre,
+                ip: checkbox.dataset.ip,
+                puerto: checkbox.dataset.puerto
+            });
+        });
+
+        console.log('Imprimiendo en:', impresorasSeleccionadas);
+        console.log('Ticket ID:', mesa.idTicket);
+
+        // Enviar solicitud de impresión al servidor
+        const response = await fetch(`${API_BASE}/tickets/${mesa.idTicket}/imprimir`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                impresoras: impresorasSeleccionadas.map(i => i.id)
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            cerrarModalImpresoras();
+        }
+
+    } catch (error) {
+        console.error('Error al imprimir:', error);
+        alert('Error al enviar la impresión');
+    }
+}

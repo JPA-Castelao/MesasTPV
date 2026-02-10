@@ -1,7 +1,7 @@
     .employee-name {
         font-size: 1rem;
     }
-    }
+
 
     /* ========== PREVENIR LAYOUT SHIFT CUANDO MODAL ABIERTO ========== */
     /* Esto previene que el grid de mesas se redimensione cuando el modal se abre */

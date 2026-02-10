@@ -256,6 +256,27 @@
                 </div>
             </div>
         </div>
+
+        <!-- Modal Selección de Complementos -->
+        <div id="modal-complementos" class="modal modal-complementos">
+            <div class="modal-content modal-complementos-content">
+                <div class="modal-header">
+                    <h2 class="modal-complementos-title">Seleccionar Complementos</h2>
+                    <button class="close close-complementos" aria-label="Cerrar">&times;</button>
+                </div>
+                <div id="complementos-lista" class="complementos-lista">
+                    <!-- Se carga dinámicamente -->
+                </div>
+                <div class="complementos-texto-libre">
+                    <label for="complemento-texto">Complemento personalizado:</label>
+                    <input type="text" id="complemento-texto" placeholder="Escribe un complemento..." />
+                </div>
+                <div class="complementos-acciones">
+                    <button id="btn-cancelar-complementos" class="btn btn-cancelar">Cancelar</button>
+                    <button id="btn-aplicar-complementos" class="btn btn-confirmar">Aplicar</button>
+                </div>
+            </div>
+        </div>
     </div>
     <script src="js/app.js"></script>
 </body>

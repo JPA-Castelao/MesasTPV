@@ -413,13 +413,12 @@ app.get('/api/mesas/:idCliente/items', async (req, res) => {
         const result = await pool.request()
             .input('IdCliente', sql.VarChar(50), idCliente)
             .query(`
-                SELECT tl.IdArticulo as id, art.DESCRIP as nombre, tl.Cantidad as cantidad, tl.Precio as precio
+                SELECT tl.IdTicket, tl.IdLinea, tl.IdArticulo as id, art.DESCRIP as nombre, tl.Cantidad as cantidad, tl.Precio as precio, tl.Observaciones as observaciones
                 FROM Tickets t
                 INNER JOIN Tickets_Lineas tl ON t.IdTicket = tl.IdTicket
                 LEFT JOIN Articulos art ON tl.IdArticulo = art.IdArticulo
                 WHERE t.IdCliente = @IdCliente
-                  AND t.IdTicket = (SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC)
-                ORDER BY tl.IdLinea ASC
+                ORDER BY tl.IdLinea
             `);
 
         console.log('Items obtenidos desde BD:', result.recordset.length);
@@ -480,8 +479,8 @@ async function crearTicketConSP(pool, idCliente, idEmpleado) {
 app.post('/api/mesas/:idCliente/items', async (req, res) => {
     try {
         const idCliente = req.params.idCliente;
-        const { productoId, idEmpleado, cantidad: cantidadSolicitada } = req.body;
-        console.log('Agregando item a cliente:', { idCliente, productoId, idEmpleado, cantidad: cantidadSolicitada });
+        const { productoId, idEmpleado, cantidad: cantidadSolicitada, observaciones } = req.body;
+        console.log('Agregando item a cliente:', { idCliente, productoId, idEmpleado, cantidad: cantidadSolicitada, observaciones });
 
         const pool = await getConnection();
 
@@ -558,9 +557,10 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
                 .input('tipoalquiler', sql.SmallInt, null)
                 .input('idlinea_abono', sql.Int, null)
                 .input('idlinea_oferta', sql.Int, null)
+                .input('Observaciones', sql.VarChar(250), observaciones || null)
                 .query(`
-                    INSERT INTO Tickets_Lineas (IdTicket, IdLinea, IdArticulo, IdAlmacen, Cantidad, Precio, PorcDesc, Descuento, IdIVA, Total, Usuario, fechaini, fechadev, tipoalquiler, idlinea_abono, idlinea_oferta)
-                    VALUES (@IdTicket, @IdLinea, @IdArticulo, @IdAlmacen, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @Usuario, @fechaini, @fechadev, @tipoalquiler, @idlinea_abono, @idlinea_oferta)
+                    INSERT INTO Tickets_Lineas (IdTicket, IdLinea, IdArticulo, IdAlmacen, Cantidad, Precio, PorcDesc, Descuento, IdIVA, Total, Usuario, fechaini, fechadev, tipoalquiler, idlinea_abono, idlinea_oferta, Observaciones)
+                    VALUES (@IdTicket, @IdLinea, @IdArticulo, @IdAlmacen, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @Usuario, @fechaini, @fechadev, @tipoalquiler, @idlinea_abono, @idlinea_oferta, @Observaciones)
                 `);
 
             await transaction.commit();
@@ -646,6 +646,37 @@ app.put('/api/mesas/:idCliente/items/:itemId/cantidad', async (req, res) => {
         res.status(500).json({ error: 'Error al actualizar cantidad', details: err.message });
     }
 });
+
+// Actualizar observaciones de un item (línea de ticket)
+app.put('/api/tickets/:idTicket/lineas/:idLinea/observaciones', async (req, res) => {
+    try {
+        const idTicket = req.params.idTicket;
+        const idLinea = req.params.idLinea;
+        const { observaciones } = req.body;
+        console.log('Actualizando observaciones:', { idTicket, idLinea, observaciones });
+
+        const pool = await getConnection();
+
+        // Actualizar observaciones en la línea del ticket
+        await pool.request()
+            .input('IdTicket', sql.Int, idTicket)
+            .input('IdLinea', sql.SmallInt, idLinea)
+            .input('Observaciones', sql.VarChar(250), observaciones || null)
+            .query(`UPDATE Tickets_Lineas SET Observaciones = @Observaciones WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
+
+        console.log('Observaciones actualizadas');
+
+        // Invalidar caché de mesas
+        invalidarCacheMesas();
+
+        res.json({ success: true });
+
+    } catch (err) {
+        console.error('Error al actualizar observaciones:', err);
+        res.status(500).json({ error: 'Error al actualizar observaciones', details: err.message });
+    }
+});
+
 
 // Eliminar item de mesa (en BD - Tickets_Lineas)
 app.delete('/api/mesas/:idCliente/items/:productoId', async (req, res) => {
@@ -836,6 +867,31 @@ app.get('/api/favoritos', async (req, res) => {
         res.status(500).json({ error: 'Error al obtener favoritos', details: err.message });
     }
 });
+
+// Obtener complementos para un artículo
+app.get('/api/articulos/:idArticulo/complementos', async (req, res) => {
+    try {
+        const idArticulo = req.params.idArticulo;
+        const pool = await getConnection();
+        console.log('🔧 Obteniendo complementos para artículo:', idArticulo);
+
+        const result = await pool.request()
+            .input('IdArticulo', sql.VarChar(50), idArticulo)
+            .query(`
+                SELECT pcca.idarticulo, pcc.nombre 
+                FROM Pers_comandas_complementos_articulos pcca 
+                INNER JOIN Pers_comandas_complementos pcc ON pcca.idcomplemento = pcc.id
+                WHERE pcca.idarticulo = @IdArticulo
+            `);
+
+        console.log('🔧 Complementos obtenidos:', result.recordset.length);
+        res.json(result.recordset);
+    } catch (err) {
+        console.error('❌ Error al obtener complementos:', err);
+        res.status(500).json({ error: 'Error al obtener complementos', details: err.message });
+    }
+});
+
 
 
 // =============================================

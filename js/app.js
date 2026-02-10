@@ -471,16 +471,30 @@ async function abrirModalTicket() {
 
             const itemElement = document.createElement('div');
             itemElement.className = 'item-pedido';
+            itemElement.style.overflow = 'visible';
+            itemElement.style.height = 'auto';
+            itemElement.style.marginBottom = '1rem';
             itemElement.innerHTML = `
-                <div class="item-info">
-                    <span class="item-nombre">${item.nombre}</span>
-                    <span class="item-cantidad">x${item.cantidad}</span>
-                </div>
-                <div class="item-precios">
-                    <span class="item-subtotal">${subtotal.toFixed(2)}€</span>
-                    <button class="btn btn-eliminar" data-id="${item.id}">Eliminar</button>
-                </div>
-            `;
+    <div class="item-info">
+        <span class="item-nombre">${item.nombre}</span>
+        <span class="item-cantidad">x${item.cantidad}</span>
+    </div>
+    <div class="item-precios" style="overflow: visible; height: auto; display: flex; flex-direction: column; gap: 0.5rem; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="item-subtotal">${subtotal.toFixed(2)}€</span>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; width: 100%;">
+            <button class="btn btn-complementos" data-id="${item.id}" style="background: #8B4513; color: white; padding: 0.1rem 0.3rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1.7rem;">🍴</button>
+            <button class="btn btn-eliminar" data-id="${item.id}" style="padding: 0.1rem 0.3rem; font-size: 1.7rem;">🗑️</button>
+        </div>
+    </div>
+`;
+
+            // Event listener para complementos
+            itemElement.querySelector('.btn-complementos').addEventListener('click', () => {
+                console.log('Abriendo complementos desde modal ticket para:', item.nombre);
+                abrirModalComplementos(item.id, item.IdTicket, item);
+            });
 
             itemElement.querySelector('.btn-eliminar').addEventListener('click', async () => {
                 await eliminarItem(item.id);
@@ -943,7 +957,6 @@ function crearMesaElement(idCliente) {
             <div class="mesa-numero">${mesa.nombre}</div>
             <div class="mesa-estado">${ocupada ? `${total.toFixed(2)}€` : 'Libre'}</div>
         </div>
-        ${ocupada && total > 0 ? `<div class="mesa-total">${total.toFixed(2)}€</div>` : ''}
     `;
 
     if (ocupada) {
@@ -1324,21 +1337,29 @@ function actualizarItemsPedido() {
         ultimoItemContainer.classList.add('empty');
         ultimoItemContainer.innerHTML = '<div class="ultimo-item-empty">Agrega artículos al pedido</div>';
     } else {
+        ultimoItemContainer.innerHTML = '';
         ultimoItemContainer.classList.remove('empty');
 
         // Mostrar último item agregado
         const ultimoItem = mesa.items[mesa.items.length - 1];
         const subtotalUltimo = ultimoItem.precio * ultimoItem.cantidad;
 
-        ultimoItemContainer.innerHTML = `
-            <div class="ultimo-item">
-                <div class="ultimo-item-info">
-                    <span class="ultimo-item-nombre">${ultimoItem.nombre}</span>
-                    <span class="ultimo-item-cantidad">x${ultimoItem.cantidad}</span>
-                </div>
-                <div class="ultimo-item-precio">${subtotalUltimo.toFixed(2)}€</div>
+        const ultimoItemDiv = document.createElement('div');
+        ultimoItemDiv.className = 'ultimo-item';
+        ultimoItemDiv.innerHTML = `
+            <div class="ultimo-item-info">
+                <span class="ultimo-item-nombre">${ultimoItem.nombre}</span>
+                <span class="ultimo-item-cantidad">x${ultimoItem.cantidad}</span>
             </div>
+            <div class="ultimo-item-precio">${subtotalUltimo.toFixed(2)}€</div>
         `;
+
+        // Agregar evento de click para abrir modal de complementos
+        ultimoItemDiv.addEventListener('click', () => {
+            abrirModalComplementos(ultimoItem.id, ultimoItem.IdTicket, ultimoItem);
+        });
+
+        ultimoItemContainer.appendChild(ultimoItemDiv);
     }
 
     // Renderizar todos los items en la lista expandible
@@ -1348,18 +1369,40 @@ function actualizarItemsPedido() {
 
         const itemElement = document.createElement('div');
         itemElement.className = 'item-pedido';
+        itemElement.style.overflow = 'visible';
+        itemElement.style.height = 'auto';
+        itemElement.style.marginBottom = '1rem';
         itemElement.innerHTML = `
             <div class="item-info">
                 <span class="item-nombre">${item.nombre}</span>
                 <span class="item-cantidad">x${item.cantidad}</span>
             </div>
-            <div class="item-precios">
-                <span class="item-subtotal">${subtotal.toFixed(2)}€</span>
-                <button class="btn btn-eliminar" data-id="${item.id}">Eliminar</button>
+            <div class="item-precios" style="overflow: visible; height: auto; display: flex; flex-direction: column; gap: 0.5rem; width: 100%;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="item-subtotal">${subtotal.toFixed(2)}€</span>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 0.5rem; width: 100%;">
+                    <button class="btn btn-complementos" data-id="${item.id}" style="background: #8B4513; color: white; padding: 0.1rem 0.3rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1.7rem;">🍴</button>
+                    <button class="btn btn-eliminar" data-id="${item.id}" style="padding: 0.1rem 0.3rem; font-size: 1.7rem;">🗑️</button>
+                </div>
             </div>
         `;
 
-        itemElement.querySelector('.btn-eliminar').addEventListener('click', () => eliminarItem(item.id));
+        // Botón de complementos
+        const btnComplementos = itemElement.querySelector('.btn-complementos');
+        btnComplementos.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevenir burbujeo
+            console.log('Abriendo complementos para:', item.nombre, item);
+            abrirModalComplementos(item.id, item.IdTicket, item);
+        });
+
+        // Botón eliminar
+        const btnEliminar = itemElement.querySelector('.btn-eliminar');
+        btnEliminar.addEventListener('click', (e) => {
+            e.stopPropagation();
+            eliminarItem(item.id);
+        });
+
         itemsPedidoContainer.appendChild(itemElement);
     });
 
@@ -1579,3 +1622,225 @@ function cerrarModal() {
 // =============================================
 
 document.addEventListener('DOMContentLoaded', init);
+
+// =============================================
+// MODAL COMPLEMENTOS
+// =============================================
+
+let idArticuloActual = null;
+let idTicketActual = null;
+let itemActual = null;
+
+// Abrir modal de complementos
+// Abrir modal de complementos
+async function abrirModalComplementos(idArticulo, idTicket, item) {
+    try {
+        console.log('--- ABRIR MODAL COMPLEMENTOS ---');
+        console.log('ID Articulo:', idArticulo);
+        console.log('ID Ticket:', idTicket);
+        console.log('Item:', item);
+
+        idArticuloActual = idArticulo;
+        idTicketActual = idTicket;
+        itemActual = item;
+
+        // Validaciones básicas
+        if (!item) {
+            console.error('❌ Error: El item es nulo o indefinido');
+            return;
+        }
+
+        if (!mesaActual) {
+            console.error('❌ Error: No hay mesa actual');
+            return;
+        }
+
+        // Usar las observaciones del item pasado directamente
+        const observacionesActuales = item.observaciones || '';
+        console.log('Observaciones actuales:', observacionesActuales);
+
+        // Parsear observaciones existentes (separadas por comas)
+        const complementosExistentes = observacionesActuales
+            .split(',')
+            .map(c => c.trim())
+            .filter(c => c.length > 0);
+
+        console.log('Solicitando complementos al servidor...');
+
+        // Obtener complementos del artículo
+        const response = await fetch(`${API_BASE}/articulos/${idArticulo}/complementos`);
+
+        if (!response.ok) {
+            console.error(`❌ Error HTTP: ${response.status} al obtener complementos`);
+            return;
+        }
+
+        const complementos = await response.json();
+        console.log('✅ Complementos obtenidos:', complementos.length);
+
+        const modalComplementos = document.getElementById('modal-complementos');
+        const complementosLista = document.getElementById('complementos-lista');
+        const complementoTexto = document.getElementById('complemento-texto');
+
+        if (!modalComplementos || !complementosLista) {
+            console.error('❌ Error: No se encontraron elementos del DOM para el modal');
+            return;
+        }
+
+        complementosLista.innerHTML = '';
+
+        // Separar complementos existentes en predefinidos y personalizados
+        const complementosPredefinidos = complementos.map(c => c.nombre);
+        const complementosPersonalizados = complementosExistentes.filter(
+            c => !complementosPredefinidos.includes(c)
+        );
+
+        if (complementos.length === 0) {
+            complementosLista.innerHTML = '<div class="complementos-empty">No hay complementos predefinidos para este artículo</div>';
+        } else {
+            complementos.forEach((complemento, index) => {
+                const complementoItem = document.createElement('div');
+                complementoItem.className = 'complemento-item';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `complemento-${index}`;
+                checkbox.value = complemento.nombre;
+
+                // Marcar checkbox si estaba previamente seleccionado
+                if (complementosExistentes.includes(complemento.nombre)) {
+                    checkbox.checked = true;
+                }
+
+                const label = document.createElement('label');
+                label.htmlFor = `complemento-${index}`;
+                label.textContent = complemento.nombre;
+
+                complementoItem.appendChild(checkbox);
+                complementoItem.appendChild(label);
+
+                // Hacer que todo el item sea clickable
+                complementoItem.addEventListener('click', (e) => {
+                    if (e.target !== checkbox) {
+                        checkbox.checked = !checkbox.checked;
+                    }
+                });
+
+                complementosLista.appendChild(complementoItem);
+            });
+        }
+
+        // Poner complementos personalizados en el campo de texto
+        if (complementoTexto) {
+            complementoTexto.value = complementosPersonalizados.join(', ');
+        }
+
+        console.log('Mostrando modal...');
+        modalComplementos.style.display = 'block';
+    } catch (error) {
+        console.error('❌ Error fatal al abrir modal de complementos:', error);
+    }
+}
+
+// Aplicar complementos seleccionados (guardar en observaciones)
+async function aplicarComplementos() {
+    try {
+        const complementosSeleccionados = [];
+
+        // Obtener todos los checkboxes marcados
+        const checkboxes = document.querySelectorAll('.complemento-item input[type="checkbox"]:checked');
+        checkboxes.forEach(checkbox => {
+            complementosSeleccionados.push(checkbox.value);
+        });
+
+        // Obtener texto libre si existe
+        const complementoTexto = document.getElementById('complemento-texto');
+        if (complementoTexto && complementoTexto.value.trim()) {
+            complementosSeleccionados.push(complementoTexto.value.trim());
+        }
+
+        if (complementosSeleccionados.length === 0) {
+            cerrarModalComplementos();
+            return;
+        }
+
+        // Concatenar con comas
+        const observaciones = complementosSeleccionados.join(', ');
+        console.log('Guardando observaciones:', observaciones);
+
+        // GUARDAR EN LA BASE DE DATOS
+        if (!itemActual || !itemActual.IdTicket || !itemActual.IdLinea) {
+            console.error('Falta información del item para guardar observaciones', itemActual);
+            cerrarModalComplementos();
+            return;
+        }
+
+        console.log(`Llamando PUT /api/tickets/${itemActual.IdTicket}/lineas/${itemActual.IdLinea}/observaciones`);
+
+        // Llamar al endpoint PUT para actualizar las observaciones
+        const updateResponse = await fetch(`${API_BASE}/tickets/${itemActual.IdTicket}/lineas/${itemActual.IdLinea}/observaciones`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ observaciones })
+        });
+
+        if (!updateResponse.ok) {
+            const errorData = await updateResponse.text();
+            console.error('Error al guardar observaciones:', errorData);
+            alert('Error al guardar complementos');
+            cerrarModalComplementos();
+            return;
+        }
+
+        console.log(`✅ Observaciones guardadas exitosamente: "${observaciones}"`);
+
+        // Actualizar el item local
+        itemActual.observaciones = observaciones;
+
+        // Cerrar modal
+        cerrarModalComplementos();
+
+    } catch (error) {
+        console.error('Error al aplicar complementos:', error);
+        alert('Error al guardar complementos');
+        cerrarModalComplementos();
+    }
+}
+
+// Cerrar modal de complementos
+function cerrarModalComplementos() {
+    const modalComplementos = document.getElementById('modal-complementos');
+    if (modalComplementos) {
+        modalComplementos.style.display = 'none';
+    }
+    idArticuloActual = null;
+}
+
+// Event listeners para cerrar el modal
+document.addEventListener('DOMContentLoaded', () => {
+    const closeComplementosBtn = document.querySelector('.close-complementos');
+    if (closeComplementosBtn) {
+        closeComplementosBtn.addEventListener('click', cerrarModalComplementos);
+    }
+
+    const modalComplementos = document.getElementById('modal-complementos');
+    if (modalComplementos) {
+        modalComplementos.addEventListener('click', (e) => {
+            if (e.target === modalComplementos) {
+                cerrarModalComplementos();
+            }
+        });
+    }
+
+    // Botón aplicar complementos
+    const btnAplicar = document.getElementById('btn-aplicar-complementos');
+    if (btnAplicar) {
+        btnAplicar.addEventListener('click', aplicarComplementos);
+    }
+
+    // Botón cancelar complementos
+    const btnCancelar = document.getElementById('btn-cancelar-complementos');
+    if (btnCancelar) {
+        btnCancelar.addEventListener('click', cerrarModalComplementos);
+    }
+});

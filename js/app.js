@@ -450,7 +450,8 @@ async function abrirModalTicket() {
 
         // Actualizar el estado local con los items más recientes
         const mesa = mesas[mesaActual];
-        mesa.items = items;
+        // Ordenar items
+        mesa.items = ordenarItems(items);
         mesa.total = items.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
 
         const modalTicket = document.getElementById('modal-ticket');
@@ -678,6 +679,12 @@ function ordenarMesasPorOrdenGuardado(mesasArray) {
 // FUNCIONES DE API
 // =============================================
 
+function ordenarItems(items) {
+    if (!items || !Array.isArray(items)) return [];
+    // Ordenar por IdLinea ascendente para que el último insertado quede al final
+    return items.sort((a, b) => (a.IdLinea || 0) - (b.IdLinea || 0));
+}
+
 async function cargarMesas() {
     try {
         console.log('Cargando mesas desde clientes...');
@@ -689,6 +696,7 @@ async function cargarMesas() {
 
         cargarOrdenMesas();
 
+        const mesasAnteriores = { ...mesas };
         mesas = {};
         mesasContainer.innerHTML = '';
 
@@ -698,8 +706,8 @@ async function cargarMesas() {
             let idTicket = mesa.idTicket;
             let total = mesa.total || 0;
 
-            if (mesaActual === mesa.idCliente && mesas[mesaActual]) {
-                const mesaLocal = mesas[mesaActual];
+            if (mesaActual === mesa.idCliente && mesasAnteriores[mesaActual]) {
+                const mesaLocal = mesasAnteriores[mesaActual];
                 if (mesaLocal.items && mesaLocal.items.length > 0) {
                     items = mesaLocal.items;
                     total = mesaLocal.total; // Preservar total calculado localmente
@@ -1180,7 +1188,8 @@ async function abrirMesa(idCliente) {
         const items = await itemsResponse.json();
 
         // Guardar items en el estado local de la mesa
-        mesas[idCliente].items = items;
+        // Ordenar items
+        mesas[idCliente].items = ordenarItems(items);
         mesas[idCliente].ocupada = items.length > 0;
         mesas[idCliente].total = items.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
         // Guardar el IdTicket si hay items
@@ -1328,18 +1337,25 @@ async function agregarProducto(producto) {
         const itemsResponse = await fetch(`${API_BASE}/mesas/${mesaActual}/items`);
         const items = await itemsResponse.json();
 
-        mesa.items = items;
-        mesa.ocupada = items.length > 0;
-        mesa.total = items.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+        // CRÍTICO: Re-obtener la referencia a la mesa porque cargarMesas() puede haber
+        // recreado el objeto mesas mientras esperábamos el fetch
+        if (mesas[mesaActual]) {
+            const mesaActualizada = mesas[mesaActual];
 
-        // Fallback por si no vino en la respuesta POST
-        if (!mesa.idTicket && items.length > 0 && items[0].IdTicket) {
-            mesa.idTicket = items[0].IdTicket;
-            console.log('✅ IdTicket asignado desde items:', mesa.idTicket);
+            // Ordenar items por IdLinea para asegurar consistencia
+            mesaActualizada.items = ordenarItems(items);
+            mesaActualizada.ocupada = items.length > 0;
+            mesaActualizada.total = items.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+
+            // Fallback por si no vino en la respuesta POST
+            if (!mesaActualizada.idTicket && items.length > 0 && items[0].IdTicket) {
+                mesaActualizada.idTicket = items[0].IdTicket;
+                console.log('✅ IdTicket asignado desde items:', mesaActualizada.idTicket);
+            }
+
+            actualizarItemsPedido();
+            actualizarMesaElement(mesaActual);
         }
-
-        actualizarItemsPedido();
-        actualizarMesaElement(mesaActual);
 
     } catch (error) {
         console.error('Error al agregar producto:', error);
@@ -1479,7 +1495,8 @@ async function eliminarItem(productoId) {
         const items = await itemsResponse.json();
 
         const mesa = mesas[mesaActual];
-        mesa.items = items;
+        // Ordenar items
+        mesa.items = ordenarItems(items);
         mesa.ocupada = items.length > 0;
         mesa.total = items.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
         // Guardar el IdTicket si hay items
@@ -1948,7 +1965,7 @@ async function abrirModalImpresoras() {
 
                 // Hacer que todo el item sea clickable
                 impresoraItem.addEventListener('click', (e) => {
-                    if (e.target !== checkbox) {
+                    if (e.target !== checkbox && e.target.tagName !== 'LABEL') {
                         checkbox.checked = !checkbox.checked;
                     }
                 });

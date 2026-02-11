@@ -1651,6 +1651,7 @@ body {
 .btn-imprimir {
     background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     color: white;
+    grid-column: 1 / -1;
 }
 
 .btn-imprimir:hover {
@@ -2719,6 +2720,7 @@ body.modal-open {
 #modal-complementos {
     z-index: 10001 !important;
 }
+
 /* ========== MODAL IMPRESORAS ========== */
 .modal-impresoras-content {
     max-width: 500px;
@@ -2729,7 +2731,7 @@ body.modal-open {
 .modal-impresoras-title {
     font-size: 1.3rem;
     font-weight: 700;
-    color: var(--cafe-dark);
+    color: var(white);
 }
 
 .impresoras-lista {
@@ -2778,7 +2780,8 @@ body.modal-open {
     border-top: 1px solid #ddd;
 }
 
-.impresoras-acciones .btn { flex: 1;
+.impresoras-acciones .btn {
+    flex: 1;
 }
 
 .impresoras-empty {
@@ -2789,17 +2792,38 @@ body.modal-open {
 }
 
 @media (max-width: 600px) {
-    .modal-impresoras-content {
-        max-width: 95vw;
-        margin: 1rem;
+    .modal-impresoras {
+        display: none;
+        align-items: center;
+        justify-content: center;
     }
+
+    .modal-impresoras[style*="display: block"] {
+        display: flex !important;
+    }
+
+    .modal-impresoras-content {
+        max-width: 90%;
+        width: 350px;
+        margin: 0;
+        max-height: 70vh;
+        height: auto !important;
+        display: flex;
+        flex-direction: column;
+        border-radius: var(--radius-lg);
+    }
+
     .impresoras-lista {
         padding: 1rem;
         max-height: 50vh;
+        overflow-y: auto;
     }
+
+
     .impresora-item {
         padding: 0.75rem;
     }
+
     .impresoras-acciones {
         padding: 0.75rem 1rem;
     }

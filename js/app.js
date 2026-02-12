@@ -1086,17 +1086,7 @@ function actualizarMesaElement(idCliente) {
         mesaElement.querySelector('.mesa-icon').textContent = mesa.ocupada ? '☕' : '🪑';
         mesaElement.querySelector('.mesa-estado').textContent = mesa.ocupada ? `${mesa.total.toFixed(2)}€` : 'Libre';
 
-        let totalEl = mesaElement.querySelector('.mesa-total');
-        if (mesa.ocupada && mesa.total > 0) {
-            if (!totalEl) {
-                totalEl = document.createElement('div');
-                totalEl.className = 'mesa-total';
-                mesaElement.appendChild(totalEl);
-            }
-            totalEl.textContent = mesa.total.toFixed(2) + '€';
-        } else if (totalEl) {
-            totalEl.remove();
-        }
+
     }
 }
 

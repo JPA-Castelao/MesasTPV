@@ -161,7 +161,7 @@ function iniciarKeepAlive() {
                 .query(`
                     SELECT TOP 1 a.IdArticulo, a.IdIva, p.PRECIO 
                     FROM Articulos a 
-                    LEFT JOIN VListas_Precios p ON a.IdArticulo = p.IdArticulo AND p.IdLista = 0
+                    LEFT JOIN VListas_Precios p ON a.IdArticulo = p.IdArticulo AND p.IdLista = 1
                     WHERE a.IdArticulo = @IdArticulo
                 `);
 
@@ -484,13 +484,31 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
 
         const pool = await getConnection();
 
+        // Obtener nombre de la mesa para determinar la lista de precios
+        const mesaResult = await pool.request()
+            .input('IdCliente', sql.VarChar(50), idCliente)
+            .query(`SELECT cliente FROM Clientes_Datos WHERE IdCliente = @IdCliente`);
+
+        const nombreMesa = mesaResult.recordset[0]?.cliente || '';
+
+        // Determinar IdLista según el nombre de la mesa
+        let idLista = 1; // Por defecto
+        if (nombreMesa.toUpperCase().startsWith('C')) {
+            idLista = 1;
+        } else if (nombreMesa.toUpperCase().startsWith('T')) {
+            idLista = 4;
+        }
+
+        console.log('Mesa:', nombreMesa, '- Lista de precios:', idLista);
+
         // Obtener datos del artículo: precio e IVA
         const articuloResult = await pool.request()
             .input('IdArticulo', sql.VarChar(50), productoId)
+            .input('IdLista', sql.Int, idLista)
             .query(`
                 SELECT a.IdArticulo, a.IdIva, p.PRECIO 
                 FROM Articulos a 
-                LEFT JOIN VListas_Precios p ON a.IdArticulo = p.IdArticulo AND p.IdLista = 0
+                LEFT JOIN VListas_Precios p ON a.IdArticulo = p.IdArticulo AND p.IdLista = @IdLista
                 WHERE a.IdArticulo = @IdArticulo
             `);
 
@@ -804,7 +822,7 @@ app.get('/api/articulos', async (req, res) => {
             FROM pers_OrdenArticulosTPV a
             LEFT JOIN Articulos art ON a.iDaRTICULO = art.IdArticulo
             LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo
-            WHERE IDCAJA = ${TPV_CONFIG.IdCaja} AND IdLista = 0
+            WHERE IDCAJA = ${TPV_CONFIG.IdCaja} AND IdLista = 1
             ORDER BY a.DESCRIPFAMILIA, art.DESCRIP
         `);
 
@@ -840,7 +858,7 @@ app.get('/api/favoritos', async (req, res) => {
             FROM TPV_Cajas_Favoritos_Asociados f
             LEFT JOIN pers_OrdenArticulosTPV a ON f.IdArticulo = a.iDaRTICULO AND a.IDCAJA = ${TPV_CONFIG.IdCaja}
             LEFT JOIN Articulos art ON f.IdArticulo = art.IdArticulo
-            LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo AND p.IdLista = 0
+            LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo AND p.IdLista = 1
             WHERE f.IdCaja = ${TPV_CONFIG.IdCaja}
             ORDER BY art.DESCRIP
         `);

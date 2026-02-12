@@ -336,10 +336,11 @@ app.get('/api/mesas', async (req, res) => {
                     t.IdCliente,
                     t.IdTicket,
                     COUNT(tl.IdLinea) as numItems,
-                    ISNULL(SUM(tl.Total), 0) as totalTicket,
+                    ISNULL(SUM(tl.Total * (1 + ISNULL(i.Porcentaje, 0) / 100)), 0) as totalTicket,
                     ROW_NUMBER() OVER (PARTITION BY t.IdCliente ORDER BY t.Fecha DESC) as rn
                 FROM Tickets t
                 LEFT JOIN Tickets_Lineas tl ON t.IdTicket = tl.IdTicket
+                LEFT JOIN Ivas i ON tl.IdIVA = i.IdIva
                 GROUP BY t.IdCliente, t.IdTicket, t.Fecha
             ) ticket_data ON c.IdCliente = ticket_data.IdCliente AND ticket_data.rn = 1
             WHERE c.padre = '0002'
@@ -413,10 +414,18 @@ app.get('/api/mesas/:idCliente/items', async (req, res) => {
         const result = await pool.request()
             .input('IdCliente', sql.VarChar(50), idCliente)
             .query(`
-                SELECT tl.IdTicket, tl.IdLinea, tl.IdArticulo as id, art.DESCRIP as nombre, tl.Cantidad as cantidad, tl.Precio as precio, tl.Observaciones as observaciones
+                SELECT 
+                    tl.IdTicket, 
+                    tl.IdLinea, 
+                    tl.IdArticulo as id, 
+                    art.DESCRIP as nombre, 
+                    tl.Cantidad as cantidad, 
+                    tl.Precio * (1 + ISNULL(i.Porcentaje, 0) / 100) as precio,
+                    tl.Observaciones as observaciones
                 FROM Tickets t
                 INNER JOIN Tickets_Lineas tl ON t.IdTicket = tl.IdTicket
                 LEFT JOIN Articulos art ON tl.IdArticulo = art.IdArticulo
+                LEFT JOIN Ivas i ON tl.IdIVA = i.IdIva
                 WHERE t.IdCliente = @IdCliente
                 ORDER BY tl.IdLinea
             `);
@@ -501,14 +510,15 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
 
         console.log('Mesa:', nombreMesa, '- Lista de precios:', idLista);
 
-        // Obtener datos del artículo: precio e IVA
+        // Obtener datos del artículo: precio base, IVA y porcentaje de IVA
         const articuloResult = await pool.request()
             .input('IdArticulo', sql.VarChar(50), productoId)
             .input('IdLista', sql.Int, idLista)
             .query(`
-                SELECT a.IdArticulo, a.IdIva, p.PRECIO 
+                SELECT a.IdArticulo, a.IdIva, p.PRECIO, i.Porcentaje as PorcentajeIVA
                 FROM Articulos a 
                 LEFT JOIN VListas_Precios p ON a.IdArticulo = p.IdArticulo AND p.IdLista = @IdLista
+                LEFT JOIN Ivas i ON a.IdIva = i.IdIva
                 WHERE a.IdArticulo = @IdArticulo
             `);
 
@@ -517,7 +527,13 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
         }
 
         const articulo = articuloResult.recordset[0];
-        const precio = articulo.PRECIO || 0;
+        const precioConIVA = articulo.PRECIO || 0;
+        const porcentajeIVA = articulo.PorcentajeIVA || 0;
+
+        // Calcular precio SIN IVA (el precio de lista ya incluye IVA)
+        const precio = precioConIVA / (1 + porcentajeIVA / 100);
+
+        console.log('Precio con IVA:', precioConIVA, '- IVA:', porcentajeIVA + '%', '- Precio sin IVA:', precio);
         const idIva = articulo.IdIva || 0;
         const cantidad = cantidadSolicitada || 1;
         const total = cantidad * precio;

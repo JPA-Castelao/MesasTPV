@@ -563,12 +563,16 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
                 .input('IdLinea', sql.SmallInt, idLinea)
                 .input('IdArticulo', sql.VarChar(50), productoId)
                 .input('IdAlmacen', sql.SmallInt, idAlmacen)
+                .input('IdLista', sql.SmallInt, idLista)
                 .input('Cantidad', sql.Decimal(18, 6), cantidad)
                 .input('Precio', sql.Decimal(18, 6), precio)
                 .input('PorcDesc', sql.Decimal(18, 6), 0)
                 .input('Descuento', sql.Decimal(18, 6), 0)
                 .input('IdIVA', sql.SmallInt, idIva)
                 .input('Total', sql.Decimal(18, 6), total)
+                .input('PVP', sql.Decimal(18, 6), total)
+                .input('PVP_MONEDA', sql.Decimal(18, 6), total)
+                .input('TOTAL_PVP_MONEDA', sql.Decimal(18, 6), total)
                 .input('Usuario', sql.VarChar(50), 'COMANDAS')
                 .input('fechaini', sql.DateTime, null)
                 .input('fechadev', sql.DateTime, null)
@@ -577,13 +581,13 @@ app.post('/api/mesas/:idCliente/items', async (req, res) => {
                 .input('idlinea_oferta', sql.Int, null)
                 .input('Observaciones', sql.VarChar(250), observaciones || null)
                 .query(`
-                    INSERT INTO Tickets_Lineas (IdTicket, IdLinea, IdArticulo, IdAlmacen, Cantidad, Precio, PorcDesc, Descuento, IdIVA, Total, Usuario, fechaini, fechadev, tipoalquiler, idlinea_abono, idlinea_oferta, Observaciones)
-                    VALUES (@IdTicket, @IdLinea, @IdArticulo, @IdAlmacen, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @Usuario, @fechaini, @fechadev, @tipoalquiler, @idlinea_abono, @idlinea_oferta, @Observaciones)
+                    INSERT INTO Tickets_Lineas (IdTicket, IdLinea, IdArticulo, IdAlmacen, IdLista, Cantidad, Precio, PorcDesc, Descuento, IdIVA, Total, PVP, PVP_MONEDA, TOTAL_PVP_MONEDA, Usuario, fechaini, fechadev, tipoalquiler, idlinea_abono, idlinea_oferta, Observaciones)
+                    VALUES (@IdTicket, @IdLinea, @IdArticulo, @IdAlmacen, @IdLista, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @PVP, @PVP_MONEDA, @TOTAL_PVP_MONEDA, @Usuario, @fechaini, @fechadev, @tipoalquiler, @idlinea_abono, @idlinea_oferta, @Observaciones)
                 `);
 
             await transaction.commit();
 
-            console.log('Línea insertada:', { idTicket, idLinea, productoId, precio, total });
+            console.log('Línea insertada:', { idTicket, idLinea, productoId, precio, total, idLista });
 
         } catch (txErr) {
             await transaction.rollback();

@@ -3,14 +3,19 @@
   "name": "Mesas el Trigal",
   "icons": [
     {
-      "src": "Trigal.png",
+      "src": "/img/Trigal.png",
       "sizes": "192x192",
-      "type": "img/png"
+      "type": "image/png"
+    },
+    {
+      "src": "/img/Trigal.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ],
-  "start_url": "/index.html",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
-  "display": "fullscreen",
+  "start_url": "/",
+  "background_color": "#3d2c2e",
+  "theme_color": "#3d2c2e",
+  "display": "standalone",
   "orientation": "any"
 }

@@ -1,3 +1,11 @@
+const Kaeya = true;
+
+// Silenciar logs si Kaeya es false
+if (!Kaeya) {
+    console.log = function () { };
+
+}
+
 const express = require('express');
 const sql = require('mssql');
 const cors = require('cors');
@@ -41,8 +49,8 @@ const dbConfig = {
     pool: {
         min: 2,                    // Mantener mínimo 2 conexiones siempre abiertas
         max: 10,                   // Máximo 10 conexiones
-        idleTimeoutMillis: 300000, // 5 minutos antes de cerrar conexión inactiva
-        acquireTimeoutMillis: 15000 // Timeout al adquirir conexión del pool
+        idleTimeoutMillis: 30 * 60 * 1000, //30 minutos
+        acquireTimeoutMillis: 15000
     },
     options: {
         ...config.database.options,
@@ -54,15 +62,15 @@ const dbConfig = {
     connectionTimeout: 10000,
     requestTimeout: 15000,
     // CRÍTICO: Mantener el socket TCP vivo para evitar conexiones muertas
-    beforeConnect: (conn) => {
-        conn.once('connect', (err) => {
-            if (!err) {
-                conn.on('socket', (socket) => {
-                    socket.setKeepAlive(true, 30000); // Ping TCP cada 30 segundos
-                });
-            }
-        });
-    }
+    //  beforeConnect: (conn) => {
+    //    conn.once('connect', (err) => {
+    //        if (!err) {
+    //           conn.on('socket', (socket) => {
+    //               socket.setKeepAlive(true, 30000); // Ping TCP cada 30 segundos
+    //           });
+    //       }
+    //   });
+    //   }
 };
 
 // Configuración del TPV (desde config.json)
@@ -127,61 +135,23 @@ async function getConnection() {
 let keepAliveInterval = null;
 
 function iniciarKeepAlive() {
-    if (keepAliveInterval) {
-        return; // Ya está iniciado
-    }
+    if (keepAliveInterval) return;
 
-    console.log('🔥 Iniciando keep-alive cada 2 minutos...');
-
-    // Ejecutar keep-alive cada 2 minutos (más frecuente para servidor con poca RAM)
     keepAliveInterval = setInterval(async () => {
         try {
             if (!pool) return;
-
-            // Query 1: Mantener conexión activa
-            await pool.request().query('SELECT 1 as KeepAlive');
-
-            // Query 2: Mantener caliente el plan de consulta de mesas (la más usada)
-            await pool.request()
-                .input('Padre', sql.VarChar(50), '0002')
-                .query(`
-                    SELECT TOP 1 c.IdCliente, c.cliente
-                    FROM Clientes_Datos c
-                    WHERE c.padre = @Padre
-                `);
-
-            // Query 3: Mantener caliente el plan de búsqueda de tickets
-            await pool.request()
-                .input('IdCliente', sql.VarChar(50), '0000')
-                .query('SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC');
-
-            // Query 4: Mantener caliente el plan de artículos
-            await pool.request()
-                .input('IdArticulo', sql.VarChar(50), '0000')
-                .query(`
-                    SELECT TOP 1 a.IdArticulo, a.IdIva, p.PRECIO 
-                    FROM Articulos a 
-                    LEFT JOIN VListas_Precios p ON a.IdArticulo = p.IdArticulo AND p.IdLista = 1
-                    WHERE a.IdArticulo = @IdArticulo
-                `);
-
-            // Query 5: Intentar mantener el SP compilado
-            try {
-                await pool.request()
-                    .input('iXML', sql.NVarChar(sql.MAX), `<data><IdCaja>${TPV_CONFIG.IdCaja}</IdCaja><IdCliente>0000</IdCliente><IdEmpleado>0</IdEmpleado><IdEmpresa>0</IdEmpresa></data>`)
-                    .query(`
-                        DECLARE @oXML XML;
-                        EXEC pTPV_Crear_Ticket_Comandas @iXML = @iXML, @oXML = @oXML OUTPUT;
-                    `);
-            } catch (spError) {
-                // Ignorar errores del SP dummy, solo queremos compilarlo
-            }
-
-            console.log('🔥 Keep-alive ejecutado correctamente');
+            await pool.request().query('SELECT 1');
+            console.log('🔥 Keep-alive OK');
         } catch (err) {
-            console.error('⚠️ Error en keep-alive:', err.message);
+            console.error('⚠️ Keep-alive error:', err.message);
+            try {
+                pool = await sql.connect(dbConfig);
+                console.log('✅ Pool reconectado');
+            } catch (reconnErr) {
+                pool = null;
+            }
         }
-    }, 2 * 60 * 1000); // 2 minutos
+    }, 90 * 1000);
 }
 
 // Limpiar keep-alive al cerrar
@@ -685,6 +655,71 @@ app.put('/api/mesas/:idCliente/items/:itemId/cantidad', async (req, res) => {
     }
 });
 
+// Actualizar cantidad de un item por IdLinea (evita confusión con artículos duplicados)
+app.put('/api/mesas/:idCliente/items/:idLinea/cantidad-linea', async (req, res) => {
+    try {
+        const idCliente = req.params.idCliente;
+        const idLinea = parseInt(req.params.idLinea);
+        const { cantidad } = req.body;
+        console.log('Actualizando cantidad por IdLinea:', { idCliente, idLinea, cantidad });
+
+        const pool = await getConnection();
+
+        // Buscar ticket activo para este cliente
+        const ticketResult = await pool.request()
+            .input('IdCliente', sql.VarChar(50), idCliente)
+            .query(`SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`);
+
+        const idTicket = ticketResult.recordset[0]?.IdTicket;
+
+        if (!idTicket) {
+            return res.status(404).json({ error: 'No se encontró ticket activo' });
+        }
+
+        // Buscar la línea por IdLinea
+        const lineaResult = await pool.request()
+            .input('IdTicket', sql.Int, idTicket)
+            .input('IdLinea', sql.SmallInt, idLinea)
+            .query(`SELECT IdLinea, Precio FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
+
+        if (lineaResult.recordset.length === 0) {
+            return res.status(404).json({ error: 'Línea no encontrada' });
+        }
+
+        const linea = lineaResult.recordset[0];
+
+        if (cantidad <= 0) {
+            // Eliminar la línea si la cantidad llega a 0
+            await pool.request()
+                .input('IdTicket', sql.Int, idTicket)
+                .input('IdLinea', sql.SmallInt, idLinea)
+                .query(`DELETE FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
+            console.log('Línea eliminada por cantidad 0');
+        } else {
+            const nuevoTotal = cantidad * linea.Precio;
+            await pool.request()
+                .input('IdTicket', sql.Int, idTicket)
+                .input('IdLinea', sql.SmallInt, idLinea)
+                .input('Cantidad', sql.Decimal(18, 6), cantidad)
+                .input('Total', sql.Decimal(18, 6), nuevoTotal)
+                .query(`UPDATE Tickets_Lineas SET Cantidad = @Cantidad, Total = @Total WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
+            console.log('Cantidad actualizada por IdLinea:', { cantidad, nuevoTotal });
+        }
+
+        // Invalidar caché de mesas
+        invalidarCacheMesas();
+
+        res.json({ success: true });
+
+        // Notificar a todos los clientes WebSocket
+        notificarClientes('mesa_actualizada', { idCliente });
+
+    } catch (err) {
+        console.error('Error al actualizar cantidad por IdLinea:', err);
+        res.status(500).json({ error: 'Error al actualizar cantidad', details: err.message });
+    }
+});
+
 // Actualizar observaciones de un item (línea de ticket)
 app.put('/api/tickets/:idTicket/lineas/:idLinea/observaciones', async (req, res) => {
     try {
@@ -716,12 +751,12 @@ app.put('/api/tickets/:idTicket/lineas/:idLinea/observaciones', async (req, res)
 });
 
 
-// Eliminar item de mesa (en BD - Tickets_Lineas)
-app.delete('/api/mesas/:idCliente/items/:productoId', async (req, res) => {
+// Eliminar item de mesa (en BD - Tickets_Lineas) - USA IdLinea para eliminar líneas específicas
+app.delete('/api/mesas/:idCliente/items/:idLinea', async (req, res) => {
     try {
         const idCliente = req.params.idCliente;
-        const productoId = req.params.productoId;
-        console.log('Eliminando item:', { idCliente, productoId });
+        const idLinea = parseInt(req.params.idLinea);
+        console.log('Eliminando item:', { idCliente, idLinea });
 
         const pool = await getConnection();
 
@@ -733,11 +768,11 @@ app.delete('/api/mesas/:idCliente/items/:productoId', async (req, res) => {
         const idTicket = ticketResult.recordset[0]?.IdTicket;
 
         if (idTicket) {
-            // Buscar la línea del artículo
+            // Buscar la línea específica por IdLinea
             const lineaResult = await pool.request()
                 .input('IdTicket', sql.Int, idTicket)
-                .input('IdArticulo', sql.VarChar(50), productoId)
-                .query(`SELECT IdLinea, Cantidad, Precio FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdArticulo = @IdArticulo`);
+                .input('IdLinea', sql.SmallInt, idLinea)
+                .query(`SELECT IdLinea, Cantidad, Precio FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
 
             if (lineaResult.recordset.length > 0) {
                 const linea = lineaResult.recordset[0];
@@ -747,17 +782,17 @@ app.delete('/api/mesas/:idCliente/items/:productoId', async (req, res) => {
                     const nuevoTotal = nuevaCantidad * linea.Precio;
                     await pool.request()
                         .input('IdTicket', sql.Int, idTicket)
-                        .input('IdArticulo', sql.VarChar(50), productoId)
+                        .input('IdLinea', sql.SmallInt, idLinea)
                         .input('Cantidad', sql.Decimal(10, 2), nuevaCantidad)
                         .input('Total', sql.Decimal(10, 2), nuevoTotal)
-                        .query(`UPDATE Tickets_Lineas SET Cantidad = @Cantidad, Total = @Total WHERE IdTicket = @IdTicket AND IdArticulo = @IdArticulo`);
+                        .query(`UPDATE Tickets_Lineas SET Cantidad = @Cantidad, Total = @Total WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
                     console.log('Cantidad reducida');
                 } else {
-                    // Eliminar línea
+                    // Eliminar línea específica
                     await pool.request()
                         .input('IdTicket', sql.Int, idTicket)
-                        .input('IdArticulo', sql.VarChar(50), productoId)
-                        .query(`DELETE FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdArticulo = @IdArticulo`);
+                        .input('IdLinea', sql.SmallInt, idLinea)
+                        .query(`DELETE FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
                     console.log('Línea eliminada');
                 }
             }
@@ -831,9 +866,12 @@ app.post('/api/mesas/:idCliente/cerrar', async (req, res) => {
 app.get('/api/articulos', async (req, res) => {
     try {
         const pool = await getConnection();
-        console.log('Obteniendo artículos...');
+        const idLista = parseInt(req.query.idLista) || 1;
+        console.log('Obteniendo artículos con IdLista:', idLista);
 
-        const result = await pool.request().query(`
+        const result = await pool.request()
+            .input('IdLista', sql.Int, idLista)
+            .query(`
             SELECT
                 a.iDaRTICULO,
                 art.DESCRIP,
@@ -841,8 +879,8 @@ app.get('/api/articulos', async (req, res) => {
                 P.PRECIO
             FROM pers_OrdenArticulosTPV a
             LEFT JOIN Articulos art ON a.iDaRTICULO = art.IdArticulo
-            LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo
-            WHERE IDCAJA = ${TPV_CONFIG.IdCaja} AND IdLista = 1
+            LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo AND p.IdLista = @IdLista
+            WHERE a.IDCAJA = ${TPV_CONFIG.IdCaja}
             ORDER BY a.DESCRIPFAMILIA, art.DESCRIP
         `);
 
@@ -867,8 +905,13 @@ app.get('/api/favoritos', async (req, res) => {
         `);
         console.log('🌟 Total favoritos en tabla:', testQuery.recordset[0].total);
 
+        const idLista = parseInt(req.query.idLista) || 1;
+        console.log('🌟 Obteniendo favoritos con IdLista:', idLista);
+
         // Consulta principal con LEFT JOIN para diagnóstico
-        const result = await pool.request().query(`
+        const result = await pool.request()
+            .input('IdLista', sql.Int, idLista)
+            .query(`
             SELECT
                 f.IdArticulo,
                 a.iDaRTICULO,
@@ -878,7 +921,7 @@ app.get('/api/favoritos', async (req, res) => {
             FROM TPV_Cajas_Favoritos_Asociados f
             LEFT JOIN pers_OrdenArticulosTPV a ON f.IdArticulo = a.iDaRTICULO AND a.IDCAJA = ${TPV_CONFIG.IdCaja}
             LEFT JOIN Articulos art ON f.IdArticulo = art.IdArticulo
-            LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo AND p.IdLista = 1
+            LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo AND p.IdLista = @IdLista
             WHERE f.IdCaja = ${TPV_CONFIG.IdCaja}
             ORDER BY art.DESCRIP
         `);

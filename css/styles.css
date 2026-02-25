@@ -102,6 +102,9 @@ body {
     overflow-x: hidden;
     width: 100%;
     background: white;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    user-select: none;
 }
 
 /* ========== HEADER ========== */
@@ -350,6 +353,18 @@ body {
     overflow: hidden;
     /* Evita que el contenido se desborde */
     word-wrap: break-word;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    user-select: none;
+}
+
+/* Deshabilitar selección de texto y menú táctil en elementos de la mesa */
+.mesa-numero,
+.mesa-estado,
+.mesa-icon {
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    user-select: none;
 }
 
 /* ========== LOGIN SCREEN ========== */
@@ -1089,21 +1104,24 @@ body {
     background: rgba(255, 255, 255, 0.15);
     border: none;
     color: white;
-    width: 36px;
     height: 36px;
-    border-radius: 50%;
-    font-size: 1.5rem;
+    padding: 0 1rem;
+    border-radius: var(--radius-lg);
+    font-size: 0.9rem;
+    font-weight: 700;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
     line-height: 1;
+    white-space: nowrap;
+    letter-spacing: 0.3px;
 }
 
 .close:hover {
     background: rgba(255, 255, 255, 0.25);
-    transform: rotate(90deg);
+    transform: translateX(-3px);
 }
 
 /* Modal Header Buttons Container */
@@ -1222,6 +1240,9 @@ body {
     cursor: pointer;
     transition: background 0.2s;
     z-index: 5;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    user-select: none;
 }
 
 .categoria-header:hover {
@@ -1257,6 +1278,9 @@ body {
     border-bottom: 1px solid rgba(0, 0, 0, 0.03);
     cursor: pointer;
     transition: all 0.2s ease;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    user-select: none;
 }
 
 .producto:hover {
@@ -1271,12 +1295,18 @@ body {
 .producto-nombre {
     font-weight: 500;
     color: var(--cafe-dark);
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    user-select: none;
 }
 
 .producto-precio {
     font-weight: 700;
     color: var(--cafe-brown);
     font-size: 1rem;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    user-select: none;
 }
 
 
@@ -1285,6 +1315,9 @@ body {
     align-items: center;
     gap: 0.5rem;
     padding-left: 1.25rem;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    user-select: none;
 }
 
 .producto-star {
@@ -1634,7 +1667,7 @@ body {
 }
 
 #acciones-pedido .btn {
-    padding: 0.875rem;
+
     border: none;
     border-radius: var(--radius-md);
     font-size: 0.85rem;
@@ -1644,14 +1677,11 @@ body {
     font-family: inherit;
 }
 
-#acciones-pedido .btn-eliminar {
-    grid-column: 1 / -1;
-}
+/* #acciones-pedido .btn-eliminar no ocupa fila completa */
 
 .btn-imprimir {
     background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     color: white;
-    grid-column: 1 / -1;
 }
 
 .btn-imprimir:hover {
@@ -1915,19 +1945,18 @@ body {
 
     /* Botones de acción - más compactos */
     #acciones-pedido {
-        padding: 0.75rem;
+        padding: 1rem;
         gap: 0.5rem;
         grid-template-columns: 1fr 1fr;
     }
 
     #acciones-pedido .btn {
-        padding: 0.7rem;
-        font-size: 0.8rem;
+        padding: 1.9rem;
+        font-size: 1rem;
     }
 
-    #acciones-pedido .btn-eliminar {
-        grid-column: 1 / -1;
-    }
+
+
 }
 
 /* Móviles medianos */

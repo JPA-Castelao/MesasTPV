@@ -1,5 +1,18 @@
 // Configuración
+const Kaeya = true;
 const API_BASE = '/api';
+
+// Lista de precios actual según tipo de mesa (1=Comedor/defecto, 4=Terraza)
+let idListaActual = 1;
+
+// Silenciar logs si Kaeya es false
+if (!Kaeya) {
+    const originalLog = console.log;
+    console.log = function () { };
+    // También silenciamos debug si existe
+    if (console.debug) console.debug = function () { };
+}
+
 
 // Estado de la aplicación
 let mesaActual = null;
@@ -37,6 +50,42 @@ let empleadoSeleccionado = null;
 // =============================================
 
 let ws = null;
+let intervalPolling = null; // ID del intervalo de refresco automático de mesas
+
+// En app.js, añade esto junto a las otras variables globales
+let timerInactividad = null;
+const SEGUNDOS_INACTIVIDAD = 90; // ⚠️ SOLO PARA PRUEBAS - volver a minutos después
+
+// Timestamp de la última actividad (para móvil, donde setTimeout se congela)
+let ultimaActividad = Date.now();
+
+function resetearTimerInactividad() {
+    ultimaActividad = Date.now();
+    clearTimeout(timerInactividad);
+    if (!empleadoActual) return;
+
+    timerInactividad = setTimeout(() => {
+        console.log('⏰ Sesión cerrada por inactividad (setTimeout)');
+        cerrarSesionYLimpiarCache();
+    }, SEGUNDOS_INACTIVIDAD * 1000);
+}
+
+// Móvil: cuando el usuario vuelve a la app tras tenerla en background,
+// se comprueba si ya expiró el tiempo de inactividad
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && empleadoActual) {
+        const msInactivo = Date.now() - ultimaActividad;
+        if (msInactivo >= SEGUNDOS_INACTIVIDAD * 1000) {
+            console.log('⏰ Sesión cerrada por inactividad (visibilitychange)');
+            cerrarSesionYLimpiarCache();
+        }
+    }
+});
+
+// Reiniciar el timer con cualquier interacción del usuario
+['touchstart', 'click', 'keydown'].forEach(evento => {
+    document.addEventListener(evento, resetearTimerInactividad, { passive: true });
+});
 
 function conectarWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -139,12 +188,20 @@ async function verificarSesion() {
 }
 
 function mostrarLogin() {
+    // Resetear siempre al paso 1 (selección de empleado)
+    empleadoSeleccionado = null;
+    pinIngresado = '';
+    document.getElementById('login-step-1').classList.remove('hidden');
+    document.getElementById('login-step-2').classList.add('hidden');
+    document.getElementById('pin-error').classList.add('hidden');
+
     document.getElementById('login-screen').classList.remove('hidden');
     cargarEmpleados();
 }
 
 function ocultarLogin() {
     document.getElementById('login-screen').classList.add('hidden');
+    resetearTimerInactividad();
 }
 
 async function cargarEmpleados() {
@@ -271,6 +328,12 @@ async function validarPin() {
 
             // Conectar WebSocket
             conectarWebSocket();
+
+            // Refresco automático de mesas cada 5 segundos
+            if (intervalPolling) clearInterval(intervalPolling);
+            intervalPolling = setInterval(() => {
+                cargarMesas();
+            }, 5000);
         } else {
             document.getElementById('pin-error').classList.remove('hidden');
             pinIngresado = '';
@@ -484,9 +547,15 @@ async function abrirModalTicket() {
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <span class="item-subtotal">${subtotal.toFixed(2)}€</span>
         </div>
-        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; width: 100%;">
-            <button class="btn btn-complementos" data-id="${item.id}" style="background: #8B4513; color: white; padding: 0.1rem 0.3rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1.7rem;">🍴</button>
-            <button class="btn btn-eliminar" data-id="${item.id}" style="padding: 0.1rem 0.3rem; font-size: 1.7rem;">🗑️</button>
+        <div style="display: flex; justify-content: flex-end; align-items: center; gap: 1rem; width: 100%;">
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-menos-cantidad" data-idlinea="${item.IdLinea}" data-cantidad="${item.cantidad}" style="background: #c0392b; color: white; padding: 0.2rem 0.7rem; border: none; border-radius: 8px; cursor: pointer; font-size: 2.2rem; font-weight: bold; line-height: 1; min-width: 3rem; text-align: center;">−</button>
+                <button class="btn btn-mas-cantidad" data-idlinea="${item.IdLinea}" data-cantidad="${item.cantidad}" style="background: #27ae60; color: white; padding: 0.2rem 0.7rem; border: none; border-radius: 8px; cursor: pointer; font-size: 2.2rem; font-weight: bold; line-height: 1; min-width: 3rem; text-align: center;">+</button>
+            </div>
+            <div style="display: flex; gap: 0.4rem;">
+                <button class="btn btn-complementos" data-id="${item.id}" data-idlinea="${item.IdLinea}" style="background: #8B4513; color: white; padding: 0.1rem 0.3rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1.7rem;">🍴</button>
+                <button class="btn btn-eliminar" data-idlinea="${item.IdLinea}" style="padding: 0.1rem 0.3rem; font-size: 1.7rem;">🗑️</button>
+            </div>
         </div>
     </div>
 `;
@@ -498,8 +567,20 @@ async function abrirModalTicket() {
             });
 
             itemElement.querySelector('.btn-eliminar').addEventListener('click', async () => {
-                await eliminarItem(item.id);
+                await eliminarItem(item.IdLinea);
                 // Actualizar el modal después de eliminar
+                abrirModalTicket();
+            });
+
+            itemElement.querySelector('.btn-menos-cantidad').addEventListener('click', async () => {
+                const nuevaCantidad = item.cantidad - 1;
+                await actualizarCantidadLinea(item.IdLinea, nuevaCantidad);
+                abrirModalTicket();
+            });
+
+            itemElement.querySelector('.btn-mas-cantidad').addEventListener('click', async () => {
+                const nuevaCantidad = item.cantidad + 1;
+                await actualizarCantidadLinea(item.IdLinea, nuevaCantidad);
                 abrirModalTicket();
             });
 
@@ -531,7 +612,7 @@ let mostrandoFavoritos = false;
 async function cargarProductosFavoritos() {
     try {
         console.log('⭐ Cargando productos favoritos...');
-        const response = await fetch(`${API_BASE}/favoritos`);
+        const response = await fetch(`${API_BASE}/favoritos?idLista=${idListaActual}`);
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -744,22 +825,22 @@ async function cargarMesas() {
     }
 }
 
-async function cargarProductos() {
+async function cargarProductos(idLista = 1) {
     try {
-        // Intentar cargar desde caché primero
-        const cacheKey = 'productos_cache';
+        // La clave de caché incluye la lista para que T y C tengan sus propios precios cacheados
+        const cacheKey = `productos_cache_lista_${idLista}`;
         const cacheTTL = 60 * 60 * 1000; // 1 hora
         const cached = localStorage.getItem(cacheKey);
         const cacheTime = localStorage.getItem(cacheKey + '_time');
 
         if (cached && cacheTime && (Date.now() - parseInt(cacheTime)) < cacheTTL) {
-            console.log('✅ Usando productos desde caché');
+            console.log(`✅ Usando productos desde caché (lista ${idLista})`);
             productos = JSON.parse(cached);
             return;
         }
 
-        console.log('⬇️ Descargando productos desde servidor...');
-        const response = await fetch(`${API_BASE}/articulos`);
+        console.log(`⬇️ Descargando productos desde servidor (lista ${idLista})...`);
+        const response = await fetch(`${API_BASE}/articulos?idLista=${idLista}`);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
         const data = await response.json();
@@ -883,6 +964,12 @@ async function cerrarSesionYLimpiarCache() {
             ws.close();
         }
 
+        // Detener polling automático
+        if (intervalPolling) {
+            clearInterval(intervalPolling);
+            intervalPolling = null;
+        }
+
         // Resetear estado local (las mesas en la BD quedan intactas)
         mesaActual = null;
         productos = [];
@@ -951,15 +1038,14 @@ async function init() {
     const refreshMesasBtn = document.getElementById('refresh-mesas');
     if (refreshMesasBtn) refreshMesasBtn.addEventListener('click', refrescarMesas);
 
-    // Polling automático cada 10 segundos para detectar cambios externos
+    // Polling automático cada 15 segundos para detectar cambios del TPV externo
     if (tieneSesion) {
-        setInterval(async () => {
-            // Solo recargar si no hay una mesa abierta (para no interrumpir al usuario)
-            if (!mesaActual && modalMesa.style.display !== 'block') {
+        intervalPolling = setInterval(async () => {
+            if (empleadoActual) {
                 await cargarMesas();
                 console.log('🔄 Mesas actualizadas automáticamente');
             }
-        }, 10000); // 10 segundos
+        }, 15000); // 15 segundos
     }
 }
 
@@ -1160,6 +1246,14 @@ async function abrirMesa(idCliente) {
 
         const mesa = mesas[idCliente];
         numeroMesaSpan.textContent = mesa.nombre;
+
+        // Determinar la lista de precios según el tipo de mesa (T=Terraza lista 4, resto lista 1)
+        const nombreMesa = mesa.nombre || '';
+        idListaActual = nombreMesa.toUpperCase().startsWith('T') ? 4 : 1;
+        console.log(`💰 Mesa "${nombreMesa}" → Lista de precios: ${idListaActual}`);
+
+        // Cargar productos con la lista correcta
+        await cargarProductos(idListaActual);
 
         // Resetear estado del botón de favoritos
         mostrandoFavoritos = false;
@@ -1419,8 +1513,8 @@ function actualizarItemsPedido() {
                     <span class="item-subtotal">${subtotal.toFixed(2)}€</span>
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 0.5rem; width: 100%;">
-                    <button class="btn btn-complementos" data-id="${item.id}" style="background: #8B4513; color: white; padding: 0.1rem 0.3rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1.7rem;">🍴</button>
-                    <button class="btn btn-eliminar" data-id="${item.id}" style="padding: 0.1rem 0.3rem; font-size: 1.7rem;">🗑️</button>
+                    <button class="btn btn-complementos" data-id="${item.id}" data-idlinea="${item.IdLinea}" style="background: #8B4513; color: white; padding: 0.1rem 0.3rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1.7rem;">🍴</button>
+                    <button class="btn btn-eliminar" data-idlinea="${item.IdLinea}" style="padding: 0.1rem 0.3rem; font-size: 1.7rem;">🗑️</button>
                 </div>
             </div>
         `;
@@ -1428,7 +1522,7 @@ function actualizarItemsPedido() {
         // Botón de complementos
         const btnComplementos = itemElement.querySelector('.btn-complementos');
         btnComplementos.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevenir burbujeo
+            e.stopPropagation();
             console.log('Abriendo complementos para:', item.nombre, item);
             abrirModalComplementos(item.id, item.IdTicket, item);
         });
@@ -1437,7 +1531,7 @@ function actualizarItemsPedido() {
         const btnEliminar = itemElement.querySelector('.btn-eliminar');
         btnEliminar.addEventListener('click', (e) => {
             e.stopPropagation();
-            eliminarItem(item.id);
+            eliminarItem(item.IdLinea);
         });
 
         itemsPedidoContainer.appendChild(itemElement);
@@ -1472,11 +1566,11 @@ function actualizarItemsPedido() {
     }
 }
 
-async function eliminarItem(productoId) {
+async function eliminarItem(idLinea) {
     try {
         if (!mesaActual) return;
 
-        await fetch(`${API_BASE}/mesas/${mesaActual}/items/${productoId}`, {
+        await fetch(`${API_BASE}/mesas/${mesaActual}/items/${idLinea}`, {
             method: 'DELETE'
         });
 
@@ -1499,6 +1593,42 @@ async function eliminarItem(productoId) {
 
     } catch (error) {
         console.error('Error al eliminar item:', error);
+    }
+}
+
+async function actualizarCantidadLinea(idLinea, nuevaCantidad) {
+    try {
+        if (!mesaActual) return;
+
+        if (nuevaCantidad <= 0) {
+            // Si la cantidad llega a 0, eliminar la línea
+            await eliminarItem(idLinea);
+            return;
+        }
+
+        await fetch(`${API_BASE}/mesas/${mesaActual}/items/${idLinea}/cantidad-linea`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cantidad: nuevaCantidad })
+        });
+
+        // Recargar items desde la BD
+        const itemsResponse = await fetch(`${API_BASE}/mesas/${mesaActual}/items`);
+        const items = await itemsResponse.json();
+
+        const mesa = mesas[mesaActual];
+        mesa.items = ordenarItems(items);
+        mesa.ocupada = items.length > 0;
+        mesa.total = items.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+        if (items.length > 0 && items[0].IdTicket) {
+            mesa.idTicket = items[0].IdTicket;
+        }
+
+        actualizarItemsPedido();
+        actualizarMesaElement(mesaActual);
+
+    } catch (error) {
+        console.error('Error al actualizar cantidad de línea:', error);
     }
 }
 

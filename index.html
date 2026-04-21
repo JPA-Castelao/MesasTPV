@@ -244,6 +244,21 @@
             </div>
         </div>
 
+        <!-- Modal Confirmación Mesa Ocupada -->
+        <div id="modal-mesa-ocupada" class="modal modal-confirm">
+            <div class="modal-content modal-confirm-content">
+                <div class="modal-confirm-icon">🔒</div>
+                <h2 class="modal-confirm-title">Mesa en uso</h2>
+                <p class="modal-confirm-message" id="modal-mesa-ocupada-mensaje">Esta mesa está siendo usada por otro
+                    usuario.</p>
+                <div class="modal-confirm-actions">
+                    <button id="btn-cancelar-mesa-ocupada" class="btn btn-cancelar">Cancelar</button>
+                    <button id="btn-entrar-mesa-ocupada" class="btn btn-confirmar btn-expulsar">Sí, entrar y
+                        expulsar</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Modal Confirmación Limpiar Mesa -->
         <div id="modal-confirmar-limpiar" class="modal modal-confirm">
             <div class="modal-content modal-confirm-content">
@@ -294,6 +309,8 @@
                 </div>
             </div>
         </div>
+        <!-- Toast: Aviso de expulsión -->
+        <div id="toast-expulsado"></div>
     </div>
     <script src="js/app.js"></script>
 </body>

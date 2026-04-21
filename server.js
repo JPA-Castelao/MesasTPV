@@ -1,7 +1,7 @@
-const Kaeya = true;
+const debug = false;
 
-// Silenciar logs si Kaeya es false
-if (!Kaeya) {
+// Silenciar logs si debug es false
+if (!debug) {
     console.log = function () { };
 
 }
@@ -11,7 +11,7 @@ const sql = require('mssql');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const https = require('https');
+const https = require('https')
 const http = require('http');
 const WebSocket = require('ws');
 const compression = require('compression');
@@ -188,19 +188,29 @@ app.get('/api/empleados', async (req, res) => {
 // Ocupar mesa (cuando alguien la abre)
 app.post('/api/mesas/:idCliente/ocupar', async (req, res) => {
     const idCliente = req.params.idCliente;
-    const { idEmpleado, nombreEmpleado } = req.body;
+    const { idEmpleado, nombreEmpleado, forzar } = req.body;
 
     // Verificar si ya está en uso por otro
     const enUso = mesasEnUso.get(idCliente);
     if (enUso && enUso.idEmpleado !== idEmpleado) {
-        return res.status(409).json({
-            success: false,
-            error: 'Mesa en uso',
-            empleado: enUso.nombre
+        if (!forzar) {
+            return res.status(409).json({
+                success: false,
+                error: 'Mesa en uso',
+                empleado: enUso.nombre,
+                idEmpleadoOcupante: enUso.idEmpleado
+            });
+        }
+        // Forzar: notificar al usuario anterior que fue expulsado
+        console.log(`⚡ Mesa ${idCliente} tomada por fuerza. Expulsando a ${enUso.nombre}`);
+        notificarClientes('mesa_expulsado', {
+            idCliente,
+            idEmpleadoExpulsado: enUso.idEmpleado,
+            expulsadoPor: nombreEmpleado
         });
     }
 
-    // Marcar como en uso
+    // Marcar como en uso (sobreescribe si había otro)
     mesasEnUso.set(idCliente, {
         idEmpleado,
         nombre: nombreEmpleado,
@@ -263,6 +273,22 @@ app.post('/api/login', async (req, res) => {
         }
 
         const empleado = result.recordset[0];
+
+        // Liberar cualquier mesa que este empleado tuviera bloqueada de sesiones anteriores
+        const mesasLiberadas = [];
+        mesasEnUso.forEach((value, idCliente) => {
+            if (value.idEmpleado === empleado.IdEmpleado) {
+                mesasEnUso.delete(idCliente);
+                mesasLiberadas.push(idCliente);
+                notificarClientes('mesa_liberada', { idCliente });
+                console.log(`🔓 Mesa ${idCliente} liberada al hacer login ${empleado.Nombre}`);
+            }
+        });
+
+        if (mesasLiberadas.length > 0) {
+            console.log(`✅ Login ${empleado.Nombre}: liberadas ${mesasLiberadas.length} mesas pilladas`);
+        }
+
         res.json({
             success: true,
             empleado: {
@@ -1225,6 +1251,7 @@ app.post('/api/tickets/:idTicket/imprimir', async (req, res) => {
 
     const idTicket = parseInt(req.params.idTicket);
     const impresorasIds = req.body.impresoras || [];
+    const nombreEmpleado = req.body.nombreEmpleado || '';
 
     if (!idTicket || impresorasIds.length === 0) {
         return res.status(400).json({ error: 'Faltan parámetros' });
@@ -1298,6 +1325,17 @@ app.post('/api/tickets/:idTicket/imprimir', async (req, res) => {
                 const ESC = '\x1B';
                 const GS = '\x1D';
 
+                // Tamaño de letra configurable desde config.json
+                // tamanoAlto y tamanoAncho: valores 1-8 (1 = normal, 2 = doble, etc.)
+                // GS ! byte: bits 0-2 = alto-1, bits 4-6 = ancho-1
+                const tamanoAlto = (config.tiquet && config.tiquet.tamanoAlto >= 1)
+                    ? Math.min(8, Math.max(1, config.tiquet.tamanoAlto))
+                    : 1;
+                const tamanoAncho = (config.tiquet && config.tiquet.tamanoAncho >= 1)
+                    ? Math.min(8, Math.max(1, config.tiquet.tamanoAncho))
+                    : 1;
+                const tamanoByte = String.fromCharCode((tamanoAlto - 1) | ((tamanoAncho - 1) << 4));
+
                 let comandos = '';
 
                 // Inicializar impresora
@@ -1311,19 +1349,29 @@ app.post('/api/tickets/:idTicket/imprimir', async (req, res) => {
                 comandos += GS + '!' + '\x11';
                 comandos += 'Cafeteria El Trigal\n';
 
-                // Tamaño normal
-                comandos += GS + '!' + '\x00';
+                // Volver al tamaño configurado (tamano del config)
+                comandos += GS + '!' + tamanoByte;
                 comandos += ESC + 'E' + '\x00';
 
                 // Información de mesa y fecha
                 comandos += '\n';
                 comandos += `Mesa: ${ticket.NombreMesa}\n`;
                 const fecha = new Date(ticket.Fecha);
-                comandos += `${fecha.toLocaleDateString('es-ES')} ${fecha.toLocaleTimeString('es-ES')}\n`;
+                // SQL Server guarda hora local sin TZ → mssql la trata como UTC, no convertir
+                const dd = String(fecha.getUTCDate()).padStart(2, '0');
+                const mm = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+                const yyyy = fecha.getUTCFullYear();
+                const hh = String(fecha.getUTCHours()).padStart(2, '0');
+                const min = String(fecha.getUTCMinutes()).padStart(2, '0');
+                const ss = String(fecha.getUTCSeconds()).padStart(2, '0');
+                comandos += `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}\n`;
+                if (nombreEmpleado) {
+                    comandos += `Empleado: ${nombreEmpleado}\n`;
+                }
                 comandos += '\n';
 
                 // Línea separadora
-                comandos += '------------------------------------------------\n';
+                comandos += '------------------------------------------------\n'; 1
 
                 // Align izquierda para artículos
                 comandos += ESC + 'a' + '\x00';
@@ -1351,7 +1399,7 @@ app.post('/api/tickets/:idTicket/imprimir', async (req, res) => {
                 // Centrar para el pie
                 comandos += ESC + 'a' + '\x01';
                 comandos += '\n';
-                comandos += `Impresora: ${impresora.Nombre}\n`;
+                comandos += ` ${impresora.Nombre}\n`;
                 comandos += '\n\n\n';
 
                 // Cortar papel
@@ -1360,11 +1408,17 @@ app.post('/api/tickets/:idTicket/imprimir', async (req, res) => {
                 // Enviar a la impresora por red
                 await new Promise((resolve, reject) => {
                     const client = new net.Socket();
-                    const timeout = setTimeout(() => {
-                        client.destroy();
-                        reject(new Error('Timeout al conectar con impresora'));
-                    }, 5000);
+                    let resolved = false;
 
+                    const timeout = setTimeout(() => {
+                        if (!resolved) {
+                            resolved = true;
+                            client.destroy();
+                            reject(new Error('Timeout al conectar con impresora'));
+                        }
+                    }, 8000);
+
+                    console.log(`🖨️  Intentando conectar a ${impresora.Nombre} → IP: ${impresora.IP}, Puerto: ${puerto}`);
                     client.connect(puerto, impresora.IP, () => {
                         clearTimeout(timeout);
                         console.log(`🖨️  Conectado a ${impresora.Nombre} (${impresora.IP}:${puerto})`);
@@ -1372,15 +1426,25 @@ app.post('/api/tickets/:idTicket/imprimir', async (req, res) => {
                         // Escribir datos y esperar a que se complete la escritura
                         client.write(Buffer.from(comandos, 'binary'), (err) => {
                             if (err) {
-                                client.destroy();
-                                reject(err);
+                                if (!resolved) {
+                                    resolved = true;
+                                    client.destroy();
+                                    reject(err);
+                                }
                                 return;
                             }
 
-                            // Pequeño delay para asegurar que la impresora reciba todos los datos
+                            // Datos enviados correctamente — resolver ya
+                            if (!resolved) {
+                                resolved = true;
+                                console.log(`🖨️  Datos enviados a ${impresora.Nombre}`);
+                                resolve();
+                            }
+
+                            // Dar tiempo a la impresora y cerrar
                             setTimeout(() => {
-                                client.end(); // Cerrar la conexión correctamente
-                            }, 100);
+                                client.end();
+                            }, 300);
                         });
                     });
 
@@ -1389,14 +1453,26 @@ app.post('/api/tickets/:idTicket/imprimir', async (req, res) => {
                     });
 
                     client.on('close', () => {
-                        console.log(`🖨️  Impresión enviada a ${impresora.Nombre}`);
-                        resolve();
+                        console.log(`🖨️  Conexión cerrada con ${impresora.Nombre}`);
+                        // Resolver si no se había hecho antes (p.ej. cierre limpio)
+                        if (!resolved) {
+                            resolved = true;
+                            resolve();
+                        }
                     });
 
                     client.on('error', (err) => {
                         clearTimeout(timeout);
-                        client.destroy();
-                        reject(err);
+                        // ECONNRESET: la impresora cerró la conexión tras recibir datos → éxito
+                        if (err.code === 'ECONNRESET' && resolved) {
+                            console.log(`🖨️  ECONNRESET ignorado — datos ya enviados a ${impresora.Nombre}`);
+                            return;
+                        }
+                        if (!resolved) {
+                            resolved = true;
+                            client.destroy();
+                            reject(err);
+                        }
                     });
                 });
 

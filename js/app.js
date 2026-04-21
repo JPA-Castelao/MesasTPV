@@ -1,12 +1,12 @@
 // Configuración
-const Kaeya = true;
+const debug = false;
 const API_BASE = '/api';
 
 // Lista de precios actual según tipo de mesa (1=Comedor/defecto, 4=Terraza)
 let idListaActual = 1;
 
-// Silenciar logs si Kaeya es false
-if (!Kaeya) {
+// Silenciar logs si debug es false
+if (!debug) {
     const originalLog = console.log;
     console.log = function () { };
     // También silenciamos debug si existe
@@ -113,6 +113,18 @@ function conectarWebSocket() {
         } else if (datos.tipo === 'mesa_liberada') {
             delete mesasEnUso[datos.idCliente];
             actualizarEstadoMesaEnUso(datos.idCliente);
+        } else if (datos.tipo === 'mesa_expulsado') {
+            // Soy el usuario expulsado de esta mesa?
+            if (datos.idEmpleadoExpulsado === empleadoActual?.id) {
+                console.log('⚡ Fui expulsado de la mesa', datos.idCliente, 'por', datos.expulsadoPor);
+                // Cerrar el modal de la mesa si está abierto y es la mesa de la que me expulsan
+                if (mesaActual == datos.idCliente && modalMesa.style.display === 'block') {
+                    cerrarModal();
+                }
+                // Mostrar toast de aviso
+                const nombreMesa = mesas[datos.idCliente]?.nombre || `Mesa ${datos.idCliente}`;
+                mostrarToastExpulsado(`⚡ ${datos.expulsadoPor} ha tomado el control de ${nombreMesa}`);
+            }
         }
     };
 
@@ -1216,28 +1228,34 @@ function toggleFullScreen() {
 // ABRIR MESA
 // =============================================
 
-async function abrirMesa(idCliente) {
+async function abrirMesa(idCliente, opciones = {}) {
     try {
-        // Verificar si está en uso por otro
-        const enUso = mesasEnUso[idCliente];
-        if (enUso && enUso.idEmpleado !== empleadoActual?.id) {
-            alert(`⚠️ Esta mesa está siendo usada por ${enUso.nombre}`);
-            return;
+        const forzar = opciones.forzar || false;
+
+        // Verificar si está en uso por otro (solo si no forzamos)
+        if (!forzar) {
+            const enUso = mesasEnUso[idCliente];
+            if (enUso && enUso.idEmpleado !== empleadoActual?.id) {
+                mostrarDialogoMesaOcupada(idCliente, enUso.nombre);
+                return;
+            }
         }
 
-        // Ocupar la mesa
+        // Ocupar la mesa (con o sin forzar)
         const ocuparResponse = await fetch(`${API_BASE}/mesas/${idCliente}/ocupar`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 idEmpleado: empleadoActual?.id,
-                nombreEmpleado: empleadoActual?.nombre
+                nombreEmpleado: empleadoActual?.nombre,
+                forzar
             })
         });
 
         const ocuparData = await ocuparResponse.json();
         if (!ocuparData.success) {
-            alert(`⚠️ Esta mesa está siendo usada por ${ocuparData.empleado}`);
+            // Última verificación del servidor (raza de condición)
+            mostrarDialogoMesaOcupada(idCliente, ocuparData.empleado);
             return;
         }
 
@@ -2150,7 +2168,8 @@ async function imprimirSeleccionadas() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                impresoras: impresorasSeleccionadas.map(i => i.id)
+                impresoras: impresorasSeleccionadas.map(i => i.id),
+                nombreEmpleado: empleadoActual ? empleadoActual.nombre : ''
             })
         });
 
@@ -2164,4 +2183,64 @@ async function imprimirSeleccionadas() {
         console.error('Error al imprimir:', error);
         alert('Error al enviar la impresión');
     }
+}
+
+// =============================================
+// DIÁLOGO MESA OCUPADA POR OTRO USUARIO
+// =============================================
+
+function mostrarDialogoMesaOcupada(idCliente, nombreOcupante) {
+    const modal = document.getElementById('modal-mesa-ocupada');
+    const mensaje = document.getElementById('modal-mesa-ocupada-mensaje');
+
+    if (!modal) return;
+
+    const nombreMesa = mesas[idCliente]?.nombre || `Mesa ${idCliente}`;
+    mensaje.innerHTML = `La mesa <strong>${nombreMesa}</strong> está siendo usada por <strong>${nombreOcupante}</strong>.<br><br>¿Deseas entrar igualmente y expulsarle?`;
+
+    modal.style.display = 'flex';
+
+    // Clonar botones para limpiar listeners anteriores
+    const btnEntrar = document.getElementById('btn-entrar-mesa-ocupada');
+    const btnCancelar = document.getElementById('btn-cancelar-mesa-ocupada');
+
+    const btnEntrarNuevo = btnEntrar.cloneNode(true);
+    const btnCancelarNuevo = btnCancelar.cloneNode(true);
+    btnEntrar.parentNode.replaceChild(btnEntrarNuevo, btnEntrar);
+    btnCancelar.parentNode.replaceChild(btnCancelarNuevo, btnCancelar);
+
+    btnEntrarNuevo.addEventListener('click', () => {
+        modal.style.display = 'none';
+        abrirMesa(idCliente, { forzar: true });
+    });
+
+    btnCancelarNuevo.addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+
+    // Cerrar al hacer click en el fondo
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    }, { once: true });
+}
+
+function mostrarToastExpulsado(mensaje) {
+    const toast = document.getElementById('toast-expulsado');
+    if (!toast) return;
+
+    toast.textContent = mensaje;
+    toast.style.display = 'block';
+
+    // Forzar reflow para que la transición CSS funcione
+    void toast.offsetHeight;
+    toast.classList.add('visible');
+
+    setTimeout(() => {
+        toast.classList.remove('visible');
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 400);
+    }, 4000);
 }

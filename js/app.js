@@ -796,6 +796,37 @@ function cerrarModalTicket() {
 }
 
 // =============================================
+// BOTON CAMBIAR/VISTA
+// =============================================
+document.addEventListener("DOMContentLoaded", () => {
+  // Usamos el ID exacto de tu HTML
+  const btnToggle = document.getElementById("btn-cambio-vista");
+  const toggleIcon = document.getElementById("icono-vista");
+
+  if (btnToggle && toggleIcon) {
+    // Rutas de tus imágenes (ajusta si las carpetas son distintas)
+    const iconTexto = "img/iconoTexto.png"; // El de las rayitas
+    const iconImagen = "img/iconoImagenes.png"; // El de la montañita
+
+    let isListView = false;
+
+    btnToggle.addEventListener("click", () => {
+      isListView = !isListView;
+
+      if (isListView) {
+        toggleIcon.src = iconImagen; // Mostramos icono de imagen para volver
+        document.body.classList.add("hide-product-images");
+        console.log("Modo texto activado");
+      } else {
+        toggleIcon.src = iconTexto; // Mostramos icono de texto para cambiar
+        document.body.classList.remove("hide-product-images");
+        console.log("Modo imágenes activado");
+      }
+    });
+  }
+});
+
+// =============================================
 // FAVORITOS
 // =============================================
 
@@ -1540,6 +1571,100 @@ async function abrirMesa(idCliente, opciones = {}) {
 // PRODUCTOS
 // =============================================
 
+// function mostrarProductos(terminoBusqueda = "") {
+//   productosDisponibles.innerHTML = "";
+
+//   // Filtrar productos si hay un término de búsqueda
+//   let productosFiltrados = productos;
+//   if (terminoBusqueda.trim()) {
+//     const termino = terminoBusqueda.toLowerCase();
+//     productosFiltrados = productos
+//       .filter((p) => p.nombre.toLowerCase().includes(termino))
+//       .sort((a, b) => {
+//         const ordenA = a.orden != null ? a.orden : 9999;
+//         const ordenB = b.orden != null ? b.orden : 9999;
+//         if (ordenA !== ordenB) return ordenA - ordenB;
+//         return a.nombre.localeCompare(b.nombre);
+//       });
+//   }
+
+//   // Si hay búsqueda activa, mostrar todos los productos sin agrupar por categoría
+//   if (terminoBusqueda.trim()) {
+//     if (productosFiltrados.length === 0) {
+//       productosDisponibles.innerHTML = `
+//                 <div style="padding: 2rem; text-align: center; color: #999;">
+//                     No se encontraron productos
+//                 </div>
+//             `;
+//       return;
+//     }
+
+//     productosFiltrados.forEach((producto) => {
+//       const productoElement = document.createElement("div");
+//       productoElement.className = "producto";
+//       productoElement.innerHTML = `
+//                 <div class="producto-nombre">${producto.nombre}</div>
+//                 <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
+//             `;
+//       productoElement.addEventListener("click", () =>
+//         agregarProducto(producto),
+//       );
+//       productosDisponibles.appendChild(productoElement);
+//     });
+//     return;
+//   }
+
+//   // Vista normal por categorías
+//   const categorias = [
+//     ...new Set(productosFiltrados.map((p) => p.categoria)),
+//   ].filter((c) => c);
+
+//   categorias.forEach((categoria) => {
+//     const categoriaElement = document.createElement("div");
+//     categoriaElement.className = "categoria-productos";
+
+//     const categoriaHeader = document.createElement("div");
+//     categoriaHeader.className = "categoria-header";
+//     categoriaHeader.innerHTML = `
+//             <h4>${categoria}</h4>
+//             <span class="toggle-icon">▶</span>
+//         `;
+
+//     const productosContainer = document.createElement("div");
+//     productosContainer.className = "productos-categoria-container collapsed";
+
+//     const productosCategoria = productosFiltrados.filter(
+//       (p) => p.categoria === categoria,
+//     );
+//     productosCategoria.forEach((producto) => {
+//       const productoElement = document.createElement("div");
+//       productoElement.className = "producto";
+//       productoElement.innerHTML = `
+//                 <div class="producto-nombre">${producto.nombre}</div>
+//                 <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
+//             `;
+//       productoElement.addEventListener("click", () =>
+//         agregarProducto(producto),
+//       );
+//       productosContainer.appendChild(productoElement);
+//     });
+
+//     categoriaHeader.addEventListener("click", () => {
+//       productosContainer.classList.toggle("collapsed");
+//       const toggleIcon = categoriaHeader.querySelector(".toggle-icon");
+//       toggleIcon.textContent = productosContainer.classList.contains(
+//         "collapsed",
+//       )
+//         ? "▶"
+//         : "▼";
+//     });
+
+//     categoriaElement.appendChild(categoriaHeader);
+//     categoriaElement.appendChild(productosContainer);
+//     productosDisponibles.appendChild(categoriaElement);
+//   });
+// }
+
 function mostrarProductos(terminoBusqueda = "") {
   productosDisponibles.innerHTML = "";
 
@@ -1561,25 +1686,35 @@ function mostrarProductos(terminoBusqueda = "") {
   if (terminoBusqueda.trim()) {
     if (productosFiltrados.length === 0) {
       productosDisponibles.innerHTML = `
-                <div style="padding: 2rem; text-align: center; color: #999;">
-                    No se encontraron productos
-                </div>
-            `;
+        <div style="padding: 2rem; text-align: center; color: #999;">
+            No se encontraron productos
+        </div>
+      `;
       return;
     }
+
+    // NUEVO: Creamos un contenedor con la clase "productos-grid" para las búsquedas
+    const gridBusqueda = document.createElement("div");
+    gridBusqueda.className = "productos-grid";
 
     productosFiltrados.forEach((producto) => {
       const productoElement = document.createElement("div");
       productoElement.className = "producto";
+      // NUEVO: Estructura de tarjeta con imagen
       productoElement.innerHTML = `
-                <div class="producto-nombre">${producto.nombre}</div>
-                <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
-            `;
+        <img src="img/default-user.png" alt="Imagen de ${producto.nombre}" class="producto-foto">
+        <div class="producto-info">
+            <div class="producto-nombre">${producto.nombre}</div>
+            <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
+        </div>
+      `;
       productoElement.addEventListener("click", () =>
         agregarProducto(producto),
       );
-      productosDisponibles.appendChild(productoElement);
+      gridBusqueda.appendChild(productoElement);
     });
+
+    productosDisponibles.appendChild(gridBusqueda);
     return;
   }
 
@@ -1595,12 +1730,14 @@ function mostrarProductos(terminoBusqueda = "") {
     const categoriaHeader = document.createElement("div");
     categoriaHeader.className = "categoria-header";
     categoriaHeader.innerHTML = `
-            <h4>${categoria}</h4>
-            <span class="toggle-icon">▶</span>
-        `;
+        <h4>${categoria}</h4>
+        <span class="toggle-icon">▶</span>
+    `;
 
     const productosContainer = document.createElement("div");
-    productosContainer.className = "productos-categoria-container collapsed";
+    // NUEVO: Añadida la clase "productos-grid" junto a las que ya tenías
+    productosContainer.className =
+      "productos-categoria-container productos-grid collapsed";
 
     const productosCategoria = productosFiltrados.filter(
       (p) => p.categoria === categoria,
@@ -1608,10 +1745,14 @@ function mostrarProductos(terminoBusqueda = "") {
     productosCategoria.forEach((producto) => {
       const productoElement = document.createElement("div");
       productoElement.className = "producto";
+      // NUEVO: Estructura de tarjeta con imagen
       productoElement.innerHTML = `
-                <div class="producto-nombre">${producto.nombre}</div>
-                <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
-            `;
+        <img src="img/default-user.png" alt="Imagen de ${producto.nombre}" class="producto-foto">
+        <div class="producto-info">
+            <div class="producto-nombre">${producto.nombre}</div>
+            <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
+        </div>
+      `;
       productoElement.addEventListener("click", () =>
         agregarProducto(producto),
       );

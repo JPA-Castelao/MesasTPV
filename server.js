@@ -2,19 +2,18 @@ const debug = false;
 
 // Silenciar logs si debug es false
 if (!debug) {
-    console.log = function () { };
-
+  console.log = function () {};
 }
 
-const express = require('express');
-const sql = require('mssql');
-const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
-const https = require('https')
-const http = require('http');
-const WebSocket = require('ws');
-const compression = require('compression');
+const express = require("express");
+const sql = require("mssql");
+const cors = require("cors");
+const path = require("path");
+const fs = require("fs");
+const https = require("https");
+const http = require("http");
+const WebSocket = require("ws");
+const compression = require("compression");
 
 const app = express();
 const mesasEnUso = new Map();
@@ -22,12 +21,15 @@ const mesasEnUso = new Map();
 // Cargar configuración desde archivo JSON
 let config;
 try {
-    const configFile = fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8');
-    config = JSON.parse(configFile);
-    console.log('✅ Configuración cargada desde config.json');
+  const configFile = fs.readFileSync(
+    path.join(__dirname, "config.json"),
+    "utf8",
+  );
+  config = JSON.parse(configFile);
+  console.log("✅ Configuración cargada desde config.json");
 } catch (error) {
-    console.error('❌ Error al cargar config.json:', error.message);
-    process.exit(1);
+  console.error("❌ Error al cargar config.json:", error.message);
+  process.exit(1);
 }
 
 const port = config.server.port;
@@ -38,39 +40,42 @@ app.use(cors());
 app.use(express.json());
 
 // Servir archivos estáticos con caché
-app.use(express.static('.', {
-    maxAge: '1h',
-    etag: true
-}));
+app.use(
+  express.static(".", {
+    maxAge: "1h",
+    etag: true,
+  }),
+);
 
 // Configuración de la base de datos (desde config.json) con optimizaciones de pool
 const dbConfig = {
-    ...config.database,
-    pool: {
-        min: 2,                    // Mantener mínimo 2 conexiones siempre abiertas
-        max: 10,                   // Máximo 10 conexiones
-        idleTimeoutMillis: 30 * 60 * 1000, //30 minutos
-        acquireTimeoutMillis: 15000
-    },
-    options: {
-        ...config.database.options,
-        enableArithAbort: true,
-        trustServerCertificate: config.database.options?.trustServerCertificate !== undefined
-            ? config.database.options.trustServerCertificate
-            : true
-    },
-    connectionTimeout: 10000,
-    requestTimeout: 15000,
-    // CRÍTICO: Mantener el socket TCP vivo para evitar conexiones muertas
-    //  beforeConnect: (conn) => {
-    //    conn.once('connect', (err) => {
-    //        if (!err) {
-    //           conn.on('socket', (socket) => {
-    //               socket.setKeepAlive(true, 30000); // Ping TCP cada 30 segundos
-    //           });
-    //       }
-    //   });
-    //   }
+  ...config.database,
+  pool: {
+    min: 2, // Mantener mínimo 2 conexiones siempre abiertas
+    max: 10, // Máximo 10 conexiones
+    idleTimeoutMillis: 30 * 60 * 1000, //30 minutos
+    acquireTimeoutMillis: 15000,
+  },
+  options: {
+    ...config.database.options,
+    enableArithAbort: true,
+    trustServerCertificate:
+      config.database.options?.trustServerCertificate !== undefined
+        ? config.database.options.trustServerCertificate
+        : true,
+  },
+  connectionTimeout: 10000,
+  requestTimeout: 15000,
+  // CRÍTICO: Mantener el socket TCP vivo para evitar conexiones muertas
+  //  beforeConnect: (conn) => {
+  //    conn.once('connect', (err) => {
+  //        if (!err) {
+  //           conn.on('socket', (socket) => {
+  //               socket.setKeepAlive(true, 30000); // Ping TCP cada 30 segundos
+  //           });
+  //       }
+  //   });
+  //   }
 };
 
 // Configuración del TPV (desde config.json)
@@ -90,13 +95,14 @@ const pedidosMesas = new Map();
 let idAlmacenCache = null;
 
 async function getIdAlmacen(pool) {
-    if (idAlmacenCache !== null) return idAlmacenCache;
-    const result = await pool.request()
-        .input('IdCaja', sql.Int, TPV_CONFIG.IdCaja)
-        .query('SELECT IdAlmacen FROM Cajas WHERE IdCaja = @IdCaja');
-    idAlmacenCache = result.recordset[0]?.IdAlmacen || 0;
-    console.log('✅ IdAlmacen cacheado:', idAlmacenCache);
-    return idAlmacenCache;
+  if (idAlmacenCache !== null) return idAlmacenCache;
+  const result = await pool
+    .request()
+    .input("IdCaja", sql.Int, TPV_CONFIG.IdCaja)
+    .query("SELECT IdAlmacen FROM Cajas WHERE IdCaja = @IdCaja");
+  idAlmacenCache = result.recordset[0]?.IdAlmacen || 0;
+  console.log("✅ IdAlmacen cacheado:", idAlmacenCache);
+  return idAlmacenCache;
 }
 
 // Caché de mesas (TTL corto para mantener datos frescos)
@@ -104,28 +110,28 @@ let cacheMesas = { data: null, timestamp: 0 };
 const CACHE_MESAS_TTL = 10000; // 10 segundos
 
 function invalidarCacheMesas() {
-    cacheMesas = { data: null, timestamp: 0 };
+  cacheMesas = { data: null, timestamp: 0 };
 }
 
 // Función para obtener conexión
 async function getConnection() {
-    try {
-        if (!pool) {
-            console.log('Creando nuevo pool de conexiones...');
-            pool = await sql.connect(dbConfig);
-            console.log('✅ Pool de conexiones creado exitosamente');
+  try {
+    if (!pool) {
+      console.log("Creando nuevo pool de conexiones...");
+      pool = await sql.connect(dbConfig);
+      console.log("✅ Pool de conexiones creado exitosamente");
 
-            // Cachear IdAlmacen al inicio
-            await getIdAlmacen(pool);
+      // Cachear IdAlmacen al inicio
+      await getIdAlmacen(pool);
 
-            // Iniciar keep-alive después de crear el pool
-            iniciarKeepAlive();
-        }
-        return pool;
-    } catch (err) {
-        console.error('Error al conectar con la base de datos:', err);
-        throw err;
+      // Iniciar keep-alive después de crear el pool
+      iniciarKeepAlive();
     }
+    return pool;
+  } catch (err) {
+    console.error("Error al conectar con la base de datos:", err);
+    throw err;
+  }
 }
 
 // =============================================
@@ -135,32 +141,32 @@ async function getConnection() {
 let keepAliveInterval = null;
 
 function iniciarKeepAlive() {
-    if (keepAliveInterval) return;
+  if (keepAliveInterval) return;
 
-    keepAliveInterval = setInterval(async () => {
-        try {
-            if (!pool) return;
-            await pool.request().query('SELECT 1');
-            console.log('🔥 Keep-alive OK');
-        } catch (err) {
-            console.error('⚠️ Keep-alive error:', err.message);
-            try {
-                pool = await sql.connect(dbConfig);
-                console.log('✅ Pool reconectado');
-            } catch (reconnErr) {
-                pool = null;
-            }
-        }
-    }, 90 * 1000);
+  keepAliveInterval = setInterval(async () => {
+    try {
+      if (!pool) return;
+      await pool.request().query("SELECT 1");
+      console.log("🔥 Keep-alive OK");
+    } catch (err) {
+      console.error("⚠️ Keep-alive error:", err.message);
+      try {
+        pool = await sql.connect(dbConfig);
+        console.log("✅ Pool reconectado");
+      } catch (reconnErr) {
+        pool = null;
+      }
+    }
+  }, 90 * 1000);
 }
 
 // Limpiar keep-alive al cerrar
-process.on('SIGINT', () => {
-    console.log('⏹️  Deteniendo keep-alive...');
-    if (keepAliveInterval) {
-        clearInterval(keepAliveInterval);
-    }
-    process.exit(0);
+process.on("SIGINT", () => {
+  console.log("⏹️  Deteniendo keep-alive...");
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+  }
+  process.exit(0);
 });
 
 // =============================================
@@ -168,139 +174,151 @@ process.on('SIGINT', () => {
 // =============================================
 
 // Obtener empleados activos para login
-app.get('/api/empleados', async (req, res) => {
-    try {
-        const pool = await getConnection();
-        const result = await pool.request().query(`
-            SELECT IdEmpleado, Nombre 
+app.get("/api/empleados", async (req, res) => {
+  try {
+    const pool = await getConnection();
+    const result = await pool.request().query(`
+            SELECT 
+                IdEmpleado, 
+                Nombre,
+                ImagenBase64
             FROM Pers_comandas_empleados 
             WHERE Activo = 1 AND PIN IS NOT NULL AND PIN != ''
             ORDER BY Nombre
         `);
 
-        res.json(result.recordset);
-    } catch (err) {
-        console.error('Error al obtener empleados:', err);
-        res.status(500).json({ error: 'Error al obtener empleados' });
-    }
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("Error al obtener empleados:", err);
+    res.status(500).json({ error: "Error al obtener empleados" });
+  }
 });
 
 // Ocupar mesa (cuando alguien la abre)
-app.post('/api/mesas/:idCliente/ocupar', async (req, res) => {
-    const idCliente = req.params.idCliente;
-    const { idEmpleado, nombreEmpleado, forzar } = req.body;
+app.post("/api/mesas/:idCliente/ocupar", async (req, res) => {
+  const idCliente = req.params.idCliente;
+  const { idEmpleado, nombreEmpleado, forzar } = req.body;
 
-    // Verificar si ya está en uso por otro
-    const enUso = mesasEnUso.get(idCliente);
-    if (enUso && enUso.idEmpleado !== idEmpleado) {
-        if (!forzar) {
-            return res.status(409).json({
-                success: false,
-                error: 'Mesa en uso',
-                empleado: enUso.nombre,
-                idEmpleadoOcupante: enUso.idEmpleado
-            });
-        }
-        // Forzar: notificar al usuario anterior que fue expulsado
-        console.log(`⚡ Mesa ${idCliente} tomada por fuerza. Expulsando a ${enUso.nombre}`);
-        notificarClientes('mesa_expulsado', {
-            idCliente,
-            idEmpleadoExpulsado: enUso.idEmpleado,
-            expulsadoPor: nombreEmpleado
-        });
+  // Verificar si ya está en uso por otro
+  const enUso = mesasEnUso.get(idCliente);
+  if (enUso && enUso.idEmpleado !== idEmpleado) {
+    if (!forzar) {
+      return res.status(409).json({
+        success: false,
+        error: "Mesa en uso",
+        empleado: enUso.nombre,
+        idEmpleadoOcupante: enUso.idEmpleado,
+      });
     }
-
-    // Marcar como en uso (sobreescribe si había otro)
-    mesasEnUso.set(idCliente, {
-        idEmpleado,
-        nombre: nombreEmpleado,
-        desde: new Date()
+    // Forzar: notificar al usuario anterior que fue expulsado
+    console.log(
+      `⚡ Mesa ${idCliente} tomada por fuerza. Expulsando a ${enUso.nombre}`,
+    );
+    notificarClientes("mesa_expulsado", {
+      idCliente,
+      idEmpleadoExpulsado: enUso.idEmpleado,
+      expulsadoPor: nombreEmpleado,
     });
+  }
 
-    console.log(`🔒 Mesa ${idCliente} ocupada por ${nombreEmpleado}`);
+  // Marcar como en uso (sobreescribe si había otro)
+  mesasEnUso.set(idCliente, {
+    idEmpleado,
+    nombre: nombreEmpleado,
+    desde: new Date(),
+  });
 
-    // Notificar a todos
-    notificarClientes('mesa_en_uso', { idCliente, empleado: nombreEmpleado, idEmpleado });
+  console.log(`🔒 Mesa ${idCliente} ocupada por ${nombreEmpleado}`);
 
-    res.json({ success: true });
+  // Notificar a todos
+  notificarClientes("mesa_en_uso", {
+    idCliente,
+    empleado: nombreEmpleado,
+    idEmpleado,
+  });
+
+  res.json({ success: true });
 });
 
 // Liberar mesa (cuando alguien la cierra)
-app.post('/api/mesas/:idCliente/liberar', async (req, res) => {
-    const idCliente = req.params.idCliente;
-    const { idEmpleado } = req.body;
+app.post("/api/mesas/:idCliente/liberar", async (req, res) => {
+  const idCliente = req.params.idCliente;
+  const { idEmpleado } = req.body;
 
-    const enUso = mesasEnUso.get(idCliente);
+  const enUso = mesasEnUso.get(idCliente);
 
-    // Solo puede liberar quien la ocupó
-    if (enUso && enUso.idEmpleado === idEmpleado) {
-        mesasEnUso.delete(idCliente);
-        console.log(`🔓 Mesa ${idCliente} liberada`);
+  // Solo puede liberar quien la ocupó
+  if (enUso && enUso.idEmpleado === idEmpleado) {
+    mesasEnUso.delete(idCliente);
+    console.log(`🔓 Mesa ${idCliente} liberada`);
 
-        // Notificar a todos
-        notificarClientes('mesa_liberada', { idCliente });
-    }
+    // Notificar a todos
+    notificarClientes("mesa_liberada", { idCliente });
+  }
 
-    res.json({ success: true });
+  res.json({ success: true });
 });
 
 // Obtener mesas en uso
-app.get('/api/mesas/en-uso', (req, res) => {
-    const enUso = {};
-    mesasEnUso.forEach((value, key) => {
-        enUso[key] = value;
-    });
-    res.json(enUso);
+app.get("/api/mesas/en-uso", (req, res) => {
+  const enUso = {};
+  mesasEnUso.forEach((value, key) => {
+    enUso[key] = value;
+  });
+  res.json(enUso);
 });
 
 // Login con PIN
-app.post('/api/login', async (req, res) => {
-    const { idEmpleado, pin } = req.body;
+app.post("/api/login", async (req, res) => {
+  const { idEmpleado, pin } = req.body;
 
-    try {
-        const pool = await getConnection();
-        const result = await pool.request()
-            .input('IdEmpleado', sql.Int, idEmpleado)
-            .input('PIN', sql.VarChar(10), pin)
-            .query(`
-                SELECT IdEmpleado, Nombre 
+  try {
+    const pool = await getConnection();
+    const result = await pool
+      .request()
+      .input("IdEmpleado", sql.Int, idEmpleado)
+      .input("PIN", sql.VarChar(10), pin).query(`
+                SELECT IdEmpleado, Nombre, ImagenBase64
                 FROM Pers_comandas_empleados 
                 WHERE IdEmpleado = @IdEmpleado AND PIN = @PIN AND Activo = 1
             `);
 
-        if (result.recordset.length === 0) {
-            return res.status(401).json({ success: false, error: 'PIN incorrecto' });
-        }
-
-        const empleado = result.recordset[0];
-
-        // Liberar cualquier mesa que este empleado tuviera bloqueada de sesiones anteriores
-        const mesasLiberadas = [];
-        mesasEnUso.forEach((value, idCliente) => {
-            if (value.idEmpleado === empleado.IdEmpleado) {
-                mesasEnUso.delete(idCliente);
-                mesasLiberadas.push(idCliente);
-                notificarClientes('mesa_liberada', { idCliente });
-                console.log(`🔓 Mesa ${idCliente} liberada al hacer login ${empleado.Nombre}`);
-            }
-        });
-
-        if (mesasLiberadas.length > 0) {
-            console.log(`✅ Login ${empleado.Nombre}: liberadas ${mesasLiberadas.length} mesas pilladas`);
-        }
-
-        res.json({
-            success: true,
-            empleado: {
-                id: empleado.IdEmpleado,
-                nombre: empleado.Nombre
-            }
-        });
-
-    } catch (err) {
-        console.error('Error login:', err);
-        res.status(500).json({ success: false, error: 'Error del servidor' });
+    if (result.recordset.length === 0) {
+      return res.status(401).json({ success: false, error: "PIN incorrecto" });
     }
+
+    const empleado = result.recordset[0];
+
+    // Liberar cualquier mesa que este empleado tuviera bloqueada de sesiones anteriores
+    const mesasLiberadas = [];
+    mesasEnUso.forEach((value, idCliente) => {
+      if (value.idEmpleado === empleado.IdEmpleado) {
+        mesasEnUso.delete(idCliente);
+        mesasLiberadas.push(idCliente);
+        notificarClientes("mesa_liberada", { idCliente });
+        console.log(
+          `🔓 Mesa ${idCliente} liberada al hacer login ${empleado.Nombre}`,
+        );
+      }
+    });
+
+    if (mesasLiberadas.length > 0) {
+      console.log(
+        `✅ Login ${empleado.Nombre}: liberadas ${mesasLiberadas.length} mesas pilladas`,
+      );
+    }
+
+    res.json({
+      success: true,
+      empleado: {
+        id: empleado.IdEmpleado,
+        nombre: empleado.Nombre,
+      },
+    });
+  } catch (err) {
+    console.error("Error login:", err);
+    res.status(500).json({ success: false, error: "Error del servidor" });
+  }
 });
 
 // =============================================
@@ -308,18 +326,21 @@ app.post('/api/login', async (req, res) => {
 // =============================================
 
 // Obtener todas las mesas (clientes con padre = '0002')
-app.get('/api/mesas', async (req, res) => {
-    try {
-        // Usar caché si está fresco
-        if (cacheMesas.data && (Date.now() - cacheMesas.timestamp) < CACHE_MESAS_TTL) {
-            res.set('Cache-Control', 'private, max-age=10');
-            return res.json(cacheMesas.data);
-        }
+app.get("/api/mesas", async (req, res) => {
+  try {
+    // Usar caché si está fresco
+    if (
+      cacheMesas.data &&
+      Date.now() - cacheMesas.timestamp < CACHE_MESAS_TTL
+    ) {
+      res.set("Cache-Control", "private, max-age=10");
+      return res.json(cacheMesas.data);
+    }
 
-        const pool = await getConnection();
-        console.log('Obteniendo mesas desde Clientes_Datos...');
+    const pool = await getConnection();
+    console.log("Obteniendo mesas desde Clientes_Datos...");
 
-        const result = await pool.request().query(`
+    const result = await pool.request().query(`
             SELECT 
                 c.IdCliente,
                 c.cliente as nombre,
@@ -344,40 +365,42 @@ app.get('/api/mesas', async (req, res) => {
             ORDER BY c.IdCliente
         `);
 
-        const mesas = result.recordset.map(row => ({
-            id: row.IdCliente,
-            idCliente: row.IdCliente,
-            nombre: row.nombre,
-            ocupada: row.IdTicket !== null && row.numItems > 0,
-            idTicket: row.IdTicket,
-            numItems: row.numItems || 0,
-            total: row.totalTicket || 0
-        }));
+    const mesas = result.recordset.map((row) => ({
+      id: row.IdCliente,
+      idCliente: row.IdCliente,
+      nombre: row.nombre,
+      ocupada: row.IdTicket !== null && row.numItems > 0,
+      idTicket: row.IdTicket,
+      numItems: row.numItems || 0,
+      total: row.totalTicket || 0,
+    }));
 
-        console.log('Mesas obtenidas:', mesas.length);
+    console.log("Mesas obtenidas:", mesas.length);
 
-        // Guardar en caché
-        cacheMesas = { data: mesas, timestamp: Date.now() };
+    // Guardar en caché
+    cacheMesas = { data: mesas, timestamp: Date.now() };
 
-        res.set('Cache-Control', 'private, max-age=10');
-        res.json(mesas);
-    } catch (err) {
-        console.error('Error al obtener mesas:', err);
-        res.status(500).json({ error: 'Error al obtener mesas', details: err.message });
-    }
+    res.set("Cache-Control", "private, max-age=10");
+    res.json(mesas);
+  } catch (err) {
+    console.error("Error al obtener mesas:", err);
+    res
+      .status(500)
+      .json({ error: "Error al obtener mesas", details: err.message });
+  }
 });
 
 // Abrir mesa - ahora solo retorna el ticket activo si existe
-app.post('/api/mesas/:idCliente/abrir', async (req, res) => {
-    try {
-        const idCliente = req.params.idCliente;
-        console.log('Abriendo mesa para cliente:', idCliente);
+app.post("/api/mesas/:idCliente/abrir", async (req, res) => {
+  try {
+    const idCliente = req.params.idCliente;
+    console.log("Abriendo mesa para cliente:", idCliente);
 
-        const pool = await getConnection();
+    const pool = await getConnection();
 
-        const result = await pool.request()
-            .input('IdCliente', sql.VarChar(50), idCliente)
-            .query(`
+    const result = await pool
+      .request()
+      .input("IdCliente", sql.VarChar(50), idCliente).query(`
                 SELECT TOP 1 t.IdTicket, t.Fecha,
                     (SELECT COUNT(*) FROM Tickets_Lineas tl WHERE tl.IdTicket = t.IdTicket) as numItems
                 FROM Tickets t
@@ -385,31 +408,33 @@ app.post('/api/mesas/:idCliente/abrir', async (req, res) => {
                 ORDER BY t.Fecha DESC
             `);
 
-        const ticketActivo = result.recordset[0];
+    const ticketActivo = result.recordset[0];
 
-        res.json({
-            success: true,
-            idCliente,
-            idTicket: ticketActivo?.IdTicket || null,
-            tieneTicket: ticketActivo && ticketActivo.numItems > 0
-        });
-    } catch (err) {
-        console.error('Error al abrir mesa:', err);
-        res.status(500).json({ error: 'Error al abrir mesa', details: err.message });
-    }
+    res.json({
+      success: true,
+      idCliente,
+      idTicket: ticketActivo?.IdTicket || null,
+      tieneTicket: ticketActivo && ticketActivo.numItems > 0,
+    });
+  } catch (err) {
+    console.error("Error al abrir mesa:", err);
+    res
+      .status(500)
+      .json({ error: "Error al abrir mesa", details: err.message });
+  }
 });
 
 // Obtener items de una mesa (desde BD - Tickets_Lineas)
-app.get('/api/mesas/:idCliente/items', async (req, res) => {
-    try {
-        const idCliente = req.params.idCliente;
-        console.log('Obteniendo items para cliente:', idCliente);
+app.get("/api/mesas/:idCliente/items", async (req, res) => {
+  try {
+    const idCliente = req.params.idCliente;
+    console.log("Obteniendo items para cliente:", idCliente);
 
-        const pool = await getConnection();
+    const pool = await getConnection();
 
-        const result = await pool.request()
-            .input('IdCliente', sql.VarChar(50), idCliente)
-            .query(`
+    const result = await pool
+      .request()
+      .input("IdCliente", sql.VarChar(50), idCliente).query(`
                 SELECT 
                     tl.IdTicket, 
                     tl.IdLinea, 
@@ -426,518 +451,717 @@ app.get('/api/mesas/:idCliente/items', async (req, res) => {
                 ORDER BY tl.IdLinea
             `);
 
-        console.log('Items obtenidos desde BD:', result.recordset.length);
-        res.json(result.recordset);
-    } catch (err) {
-        console.error('Error al obtener items:', err);
-        res.status(500).json({ error: 'Error al obtener items', details: err.message });
-    }
+    console.log("Items obtenidos desde BD:", result.recordset.length);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("Error al obtener items:", err);
+    res
+      .status(500)
+      .json({ error: "Error al obtener items", details: err.message });
+  }
 });
 
 // =============================================
 // FUNCIÓN PARA CREAR TICKET CON STORED PROCEDURE
 // =============================================
 
-async function crearTicketConSP(pool, idCliente, idEmpleado) {
-    console.log('Ejecutando pTPV_Crear_Ticket_Comandas para cliente:', idCliente);
+async function crearTicketConSP(pool, idCliente, idEmpleado, idLista = 1) {
+  console.log("Ejecutando pTPV_Crear_Ticket_Comandas para cliente:", idCliente);
 
-    // Construir el XML de entrada
-    const xmlInput = `<data><IdCaja>${TPV_CONFIG.IdCaja}</IdCaja><IdCliente>${idCliente}</IdCliente><IdEmpleado>${idEmpleado || TPV_CONFIG.IdEmpleado || 0}</IdEmpleado><IdEmpresa>${TPV_CONFIG.IdEmpresa || 0}</IdEmpresa></data>`;
+  // Construir el XML de entrada
+  const xmlInput = `<data><IdCaja>${TPV_CONFIG.IdCaja}</IdCaja><IdCliente>${idCliente}</IdCliente><IdEmpleado>${idEmpleado || TPV_CONFIG.IdEmpleado || 0}</IdEmpleado><IdEmpresa>${TPV_CONFIG.IdEmpresa || 0}</IdEmpresa></data>`;
 
-    // Ejecutar pTPV_Crear_Ticket_Comandas
-    const result = await pool.request()
-        .query(`
+  // Ejecutar pTPV_Crear_Ticket_Comandas
+  const result = await pool.request().query(`
             DECLARE @oXML XML;
             EXEC pTPV_Crear_Ticket_Comandas @iXML = '${xmlInput}', @oXML = @oXML OUTPUT;
             SELECT CAST(@oXML AS NVARCHAR(MAX)) AS respuesta;
         `);
 
-    // Verificar respuesta
-    const respuesta = result.recordset[0]?.respuesta || '';
-    console.log('Respuesta SP:', respuesta);
+  // Verificar respuesta
+  const respuesta = result.recordset[0]?.respuesta || "";
+  console.log("Respuesta SP:", respuesta);
 
-    if (respuesta.includes('<Estado>error</Estado>')) {
-        throw new Error('Error al crear ticket: ' + respuesta);
-    }
+  if (respuesta.includes("<Estado>error</Estado>")) {
+    throw new Error("Error al crear ticket: " + respuesta);
+  }
 
-    // Extraer IdTicket de la respuesta XML
-    const matchIdTicket = respuesta.match(/<IdTicket>(\d+)<\/IdTicket>/);
-    let idTicket = matchIdTicket ? parseInt(matchIdTicket[1]) : 0;
+  // Extraer IdTicket de la respuesta XML
+  const matchIdTicket = respuesta.match(/<IdTicket>(\d+)<\/IdTicket>/);
+  let idTicket = matchIdTicket ? parseInt(matchIdTicket[1]) : 0;
 
-    if (!idTicket || idTicket === 0) {
-        throw new Error('No se pudo obtener el IdTicket creado');
-    }
+  if (!idTicket || idTicket === 0) {
+    throw new Error("No se pudo obtener el IdTicket creado");
+  }
 
-    console.log('Ticket creado con pTPV_Crear_Ticket_Comandas:', {
-        IdTicket: idTicket,
-        IdCaja: TPV_CONFIG.IdCaja,
-        IdCliente: idCliente
-    });
+  // Actualizar IdLista en el ticket según el tipo de mesa (terraza=4, cafetería=1)
+  await pool
+    .request()
+    .input("IdTicket", sql.Int, idTicket)
+    .input("IdLista", sql.SmallInt, idLista)
+    .query(`UPDATE Tickets SET IdLista = @IdLista WHERE IdTicket = @IdTicket`);
 
-    return idTicket;
+  console.log("Ticket creado con pTPV_Crear_Ticket_Comandas:", {
+    IdTicket: idTicket,
+    IdCaja: TPV_CONFIG.IdCaja,
+    IdCliente: idCliente,
+    IdLista: idLista,
+  });
+
+  return idTicket;
 }
 
 // =============================================
 // Añadir item a mesa (INSERT directo en Tickets_Lineas)
 // =============================================
 
-app.post('/api/mesas/:idCliente/items', async (req, res) => {
-    try {
-        const idCliente = req.params.idCliente;
-        const { productoId, idEmpleado, cantidad: cantidadSolicitada, observaciones } = req.body;
-        console.log('Agregando item a cliente:', { idCliente, productoId, idEmpleado, cantidad: cantidadSolicitada, observaciones });
+app.post("/api/mesas/:idCliente/items", async (req, res) => {
+  try {
+    const idCliente = req.params.idCliente;
+    const {
+      productoId,
+      idEmpleado,
+      cantidad: cantidadSolicitada,
+      observaciones,
+    } = req.body;
+    console.log("Agregando item a cliente:", {
+      idCliente,
+      productoId,
+      idEmpleado,
+      cantidad: cantidadSolicitada,
+      observaciones,
+    });
 
-        const pool = await getConnection();
+    const pool = await getConnection();
 
-        // Obtener nombre de la mesa para determinar la lista de precios
-        const mesaResult = await pool.request()
-            .input('IdCliente', sql.VarChar(50), idCliente)
-            .query(`SELECT cliente FROM Clientes_Datos WHERE IdCliente = @IdCliente`);
+    // Obtener nombre de la mesa para determinar la lista de precios
+    const mesaResult = await pool
+      .request()
+      .input("IdCliente", sql.VarChar(50), idCliente)
+      .query(`SELECT cliente FROM Clientes_Datos WHERE IdCliente = @IdCliente`);
 
-        const nombreMesa = mesaResult.recordset[0]?.cliente || '';
+    const nombreMesa = mesaResult.recordset[0]?.cliente || "";
 
-        // Determinar IdLista según el nombre de la mesa
-        let idLista = 1; // Por defecto
-        if (nombreMesa.toUpperCase().startsWith('C')) {
-            idLista = 1;
-        } else if (nombreMesa.toUpperCase().startsWith('T')) {
-            idLista = 4;
-        }
+    // Determinar IdLista según el nombre de la mesa
+    let idLista = 1; // Por defecto
+    if (nombreMesa.toUpperCase().startsWith("C")) {
+      idLista = 1;
+    } else if (nombreMesa.toUpperCase().startsWith("T")) {
+      idLista = 4;
+    }
 
-        console.log('Mesa:', nombreMesa, '- Lista de precios:', idLista);
+    console.log("Mesa:", nombreMesa, "- Lista de precios:", idLista);
 
-        // Obtener datos del artículo: precio base, IVA y porcentaje de IVA
-        const articuloResult = await pool.request()
-            .input('IdArticulo', sql.VarChar(50), productoId)
-            .input('IdLista', sql.Int, idLista)
-            .query(`
-                SELECT a.IdArticulo, a.IdIva, p.PRECIO, i.Porcentaje as PorcentajeIVA
+    // Obtener datos del artículo: precio base, IVA y porcentaje de IVA
+    const articuloResult = await pool
+      .request()
+      .input("IdArticulo", sql.VarChar(50), productoId)
+      .input("IdLista", sql.Int, idLista).query(`
+                SELECT a.IdArticulo, a.IdIva, a.DESCRIP, p.PRECIO, i.Porcentaje as PorcentajeIVA
                 FROM Articulos a 
                 LEFT JOIN VListas_Precios p ON a.IdArticulo = p.IdArticulo AND p.IdLista = @IdLista
                 LEFT JOIN Ivas i ON a.IdIva = i.IdIva
                 WHERE a.IdArticulo = @IdArticulo
             `);
 
-        if (articuloResult.recordset.length === 0) {
-            return res.status(404).json({ error: 'Artículo no encontrado' });
-        }
+    if (articuloResult.recordset.length === 0) {
+      return res.status(404).json({ error: "Artículo no encontrado" });
+    }
 
-        const articulo = articuloResult.recordset[0];
-        const precioConIVA = articulo.PRECIO || 0;
-        const porcentajeIVA = articulo.PorcentajeIVA || 0;
+    const articulo = articuloResult.recordset[0];
+    const precioConIVA = articulo.PRECIO || 0;
+    const porcentajeIVA = articulo.PorcentajeIVA || 0;
+    const descripcionArticulo = articulo.DESCRIP || "";
 
-        // Calcular precio SIN IVA (el precio de lista ya incluye IVA)
-        const precio = precioConIVA / (1 + porcentajeIVA / 100);
+    // Calcular precio SIN IVA (el precio de lista ya incluye IVA)
+    const precio = precioConIVA / (1 + porcentajeIVA / 100);
 
-        console.log('Precio con IVA:', precioConIVA, '- IVA:', porcentajeIVA + '%', '- Precio sin IVA:', precio);
-        const idIva = articulo.IdIva || 0;
-        const cantidad = cantidadSolicitada || 1;
-        const total = cantidad * precio;
+    console.log(
+      "Precio con IVA:",
+      precioConIVA,
+      "- IVA:",
+      porcentajeIVA + "%",
+      "- Precio sin IVA:",
+      precio,
+    );
+    const idIva = articulo.IdIva || 0;
+    const cantidad = cantidadSolicitada || 1;
+    const total = cantidad * precio;
 
-        console.log('Datos del artículo:', { precio, idIva, cantidad, total });
+    console.log("Datos del artículo:", { precio, idIva, cantidad, total });
 
-        // Buscar ticket existente para este cliente
-        let ticketResult = await pool.request()
-            .input('IdCliente', sql.VarChar(50), idCliente)
-            .query(`SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`);
+    // Buscar ticket existente para este cliente
+    let ticketResult = await pool
+      .request()
+      .input("IdCliente", sql.VarChar(50), idCliente)
+      .query(
+        `SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`,
+      );
 
-        let idTicket = ticketResult.recordset[0]?.IdTicket;
+    let idTicket = ticketResult.recordset[0]?.IdTicket;
 
-        // Si no hay ticket, crear uno nuevo usando el Stored Procedure
-        if (!idTicket) {
-            console.log('No hay ticket, creando uno nuevo con pTPV_Crear_Ticket_Comandas...');
+    // Si no hay ticket, crear uno nuevo usando el Stored Procedure
+    if (!idTicket) {
+      console.log(
+        "No hay ticket, creando uno nuevo con pTPV_Crear_Ticket_Comandas...",
+      );
+      idTicket = await crearTicketConSP(pool, idCliente, idEmpleado, idLista);
+    }
 
-            // Crear ticket usando el stored procedure con el IdEmpleado
-            idTicket = await crearTicketConSP(pool, idCliente, idEmpleado);
-        }
+    // Obtener IdAlmacen desde caché (no hace query si ya está cacheado)
+    const idAlmacen = await getIdAlmacen(pool);
 
-        // Obtener IdAlmacen desde caché (no hace query si ya está cacheado)
-        const idAlmacen = await getIdAlmacen(pool);
+    // TRANSACCIÓN para evitar condiciones de carrera al obtener IdLinea
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
 
-        // TRANSACCIÓN para evitar condiciones de carrera al obtener IdLinea
-        const transaction = new sql.Transaction(pool);
-        await transaction.begin();
-
-        try {
-            // Obtener siguiente IdLinea con bloqueo (UPDLOCK) para evitar duplicados
-            const maxLineaResult = await transaction.request()
-                .input('IdTicket', sql.Int, idTicket)
-                .query(`
+    try {
+      // Obtener siguiente IdLinea con bloqueo (UPDLOCK) para evitar duplicados
+      const maxLineaResult = await transaction
+        .request()
+        .input("IdTicket", sql.Int, idTicket).query(`
                     SELECT ISNULL(MAX(IdLinea), 0) + 1 as nextLinea 
                     FROM Tickets_Lineas WITH (UPDLOCK, HOLDLOCK)
                     WHERE IdTicket = @IdTicket
                 `);
-            const idLinea = maxLineaResult.recordset[0].nextLinea;
+      const idLinea = maxLineaResult.recordset[0].nextLinea;
 
-            // INSERT directo en Tickets_Lineas
-            await transaction.request()
-                .input('IdTicket', sql.Int, idTicket)
-                .input('IdLinea', sql.SmallInt, idLinea)
-                .input('IdArticulo', sql.VarChar(50), productoId)
-                .input('IdAlmacen', sql.SmallInt, idAlmacen)
-                .input('IdLista', sql.SmallInt, idLista)
-                .input('Cantidad', sql.Decimal(18, 6), cantidad)
-                .input('Precio', sql.Decimal(18, 6), precio)
-                .input('PorcDesc', sql.Decimal(18, 6), 0)
-                .input('Descuento', sql.Decimal(18, 6), 0)
-                .input('IdIVA', sql.SmallInt, idIva)
-                .input('Total', sql.Decimal(18, 6), total)
-                .input('PVP', sql.Decimal(18, 6), total)
-                .input('PVP_MONEDA', sql.Decimal(18, 6), total)
-                .input('TOTAL_PVP_MONEDA', sql.Decimal(18, 6), total)
-                .input('Usuario', sql.VarChar(50), 'COMANDAS')
-                .input('fechaini', sql.DateTime, null)
-                .input('fechadev', sql.DateTime, null)
-                .input('tipoalquiler', sql.SmallInt, null)
-                .input('idlinea_abono', sql.Int, null)
-                .input('idlinea_oferta', sql.Int, null)
-                .input('Observaciones', sql.VarChar(250), observaciones || null)
-                .query(`
-                    INSERT INTO Tickets_Lineas (IdTicket, IdLinea, IdArticulo, IdAlmacen, IdLista, Cantidad, Precio, PorcDesc, Descuento, IdIVA, Total, PVP, PVP_MONEDA, TOTAL_PVP_MONEDA, Usuario, fechaini, fechadev, tipoalquiler, idlinea_abono, idlinea_oferta, Observaciones)
-                    VALUES (@IdTicket, @IdLinea, @IdArticulo, @IdAlmacen, @IdLista, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @PVP, @PVP_MONEDA, @TOTAL_PVP_MONEDA, @Usuario, @fechaini, @fechadev, @tipoalquiler, @idlinea_abono, @idlinea_oferta, @Observaciones)
+      // INSERT directo en Tickets_Lineas
+      await transaction
+        .request()
+        .input("IdTicket", sql.Int, idTicket)
+        .input("IdLinea", sql.SmallInt, idLinea)
+        .input("IdArticulo", sql.VarChar(50), productoId)
+        .input("Descrip", sql.VarChar(500), descripcionArticulo)
+        .input("IdAlmacen", sql.SmallInt, idAlmacen)
+        .input("IdLista", sql.SmallInt, idLista)
+        .input("Cantidad", sql.Decimal(18, 6), cantidad)
+        .input("Precio", sql.Decimal(18, 6), precio)
+        .input("PorcDesc", sql.Decimal(18, 6), 0)
+        .input("Descuento", sql.Decimal(18, 6), 0)
+        .input("IdIVA", sql.SmallInt, idIva)
+        .input("Total", sql.Decimal(18, 6), total)
+        .input("PVP", sql.Decimal(18, 6), total)
+        .input("PVP_MONEDA", sql.Decimal(18, 6), total)
+        .input("TOTAL_PVP_MONEDA", sql.Decimal(18, 6), total)
+        .input("Usuario", sql.VarChar(50), "COMANDAS")
+        .input("fechaini", sql.DateTime, null)
+        .input("fechadev", sql.DateTime, null)
+        .input("tipoalquiler", sql.SmallInt, null)
+        .input("idlinea_abono", sql.Int, null)
+        .input("idlinea_oferta", sql.Int, null)
+        .input("Observaciones", sql.VarChar(250), observaciones || null).query(`
+                    INSERT INTO Tickets_Lineas (IdTicket, IdLinea, IdArticulo, Descrip, IdAlmacen, IdLista, Cantidad, Precio, PorcDesc, Descuento, IdIVA, Total, PVP, PVP_MONEDA, TOTAL_PVP_MONEDA, Usuario, fechaini, fechadev, tipoalquiler, idlinea_abono, idlinea_oferta, Observaciones)
+                    VALUES (@IdTicket, @IdLinea, @IdArticulo, @Descrip, @IdAlmacen, @IdLista, @Cantidad, @Precio, @PorcDesc, @Descuento, @IdIVA, @Total, @PVP, @PVP_MONEDA, @TOTAL_PVP_MONEDA, @Usuario, @fechaini, @fechadev, @tipoalquiler, @idlinea_abono, @idlinea_oferta, @Observaciones)
                 `);
 
-            await transaction.commit();
+      await transaction.commit();
 
-            console.log('Línea insertada:', { idTicket, idLinea, productoId, precio, total, idLista });
-
-        } catch (txErr) {
-            await transaction.rollback();
-            throw txErr;
-        }
-
-        // Obtener nuevo total del ticket
-        const totalResult = await pool.request()
-            .input('IdTicket', sql.Int, idTicket)
-            .query(`SELECT ISNULL(SUM(Total), 0) as total FROM Tickets_Lineas WHERE IdTicket = @IdTicket`);
-
-        console.log('Item agregado');
-
-        // Invalidar caché de mesas (los datos cambiaron)
-        invalidarCacheMesas();
-
-        res.json({ success: true, total: totalResult.recordset[0].total, idTicket });
-
-        // Notificar a todos los clientes WebSocket
-        notificarClientes('mesa_actualizada', { idCliente });
-
-    } catch (err) {
-        console.error('Error al agregar item:', err);
-        res.status(500).json({ error: 'Error al agregar item', details: err.message });
+      console.log("Línea insertada:", {
+        idTicket,
+        idLinea,
+        productoId,
+        precio,
+        total,
+        idLista,
+      });
+    } catch (txErr) {
+      await transaction.rollback();
+      throw txErr;
     }
+
+    // Obtener nuevo total del ticket
+    const totalResult = await pool
+      .request()
+      .input("IdTicket", sql.Int, idTicket)
+      .query(
+        `SELECT ISNULL(SUM(Total), 0) as total FROM Tickets_Lineas WHERE IdTicket = @IdTicket`,
+      );
+
+    console.log("Item agregado");
+
+    // Invalidar caché de mesas (los datos cambiaron)
+    invalidarCacheMesas();
+
+    res.json({
+      success: true,
+      total: totalResult.recordset[0].total,
+      idTicket,
+    });
+
+    // Notificar a todos los clientes WebSocket
+    notificarClientes("mesa_actualizada", { idCliente });
+  } catch (err) {
+    console.error("Error al agregar item:", err);
+    res
+      .status(500)
+      .json({ error: "Error al agregar item", details: err.message });
+  }
 });
 
 // Actualizar cantidad de un item
-app.put('/api/mesas/:idCliente/items/:itemId/cantidad', async (req, res) => {
-    try {
-        const idCliente = req.params.idCliente;
-        const itemId = req.params.itemId;
-        const { cantidad } = req.body;
-        console.log('Actualizando cantidad del item:', { idCliente, itemId, cantidad });
+app.put("/api/mesas/:idCliente/items/:itemId/cantidad", async (req, res) => {
+  try {
+    const idCliente = req.params.idCliente;
+    const itemId = req.params.itemId;
+    const { cantidad } = req.body;
+    console.log("Actualizando cantidad del item:", {
+      idCliente,
+      itemId,
+      cantidad,
+    });
 
-        const pool = await getConnection();
+    const pool = await getConnection();
 
-        // Buscar ticket activo para este cliente
-        const ticketResult = await pool.request()
-            .input('IdCliente', sql.VarChar(50), idCliente)
-            .query(`SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`);
+    // Buscar ticket activo para este cliente
+    const ticketResult = await pool
+      .request()
+      .input("IdCliente", sql.VarChar(50), idCliente)
+      .query(
+        `SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`,
+      );
 
-        const idTicket = ticketResult.recordset[0]?.IdTicket;
+    const idTicket = ticketResult.recordset[0]?.IdTicket;
 
-        if (idTicket) {
-            // Buscar la línea del artículo por su ID
-            const lineaResult = await pool.request()
-                .input('IdTicket', sql.Int, idTicket)
-                .input('IdArticulo', sql.VarChar(50), itemId)
-                .query(`SELECT IdLinea, Precio FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdArticulo = @IdArticulo`);
+    if (idTicket) {
+      // Buscar la línea del artículo por su ID
+      const lineaResult = await pool
+        .request()
+        .input("IdTicket", sql.Int, idTicket)
+        .input("IdArticulo", sql.VarChar(50), itemId)
+        .query(
+          `SELECT IdLinea, Precio FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdArticulo = @IdArticulo`,
+        );
 
-            if (lineaResult.recordset.length > 0) {
-                const linea = lineaResult.recordset[0];
-                const nuevoTotal = cantidad * linea.Precio;
+      if (lineaResult.recordset.length > 0) {
+        const linea = lineaResult.recordset[0];
+        const nuevoTotal = cantidad * linea.Precio;
 
-                // Actualizar cantidad y total
-                await pool.request()
-                    .input('IdTicket', sql.Int, idTicket)
-                    .input('IdArticulo', sql.VarChar(50), itemId)
-                    .input('Cantidad', sql.Decimal(18, 6), cantidad)
-                    .input('Total', sql.Decimal(18, 6), nuevoTotal)
-                    .query(`UPDATE Tickets_Lineas SET Cantidad = @Cantidad, Total = @Total WHERE IdTicket = @IdTicket AND IdArticulo = @IdArticulo`);
+        // Actualizar cantidad y total
+        await pool
+          .request()
+          .input("IdTicket", sql.Int, idTicket)
+          .input("IdArticulo", sql.VarChar(50), itemId)
+          .input("Cantidad", sql.Decimal(18, 6), cantidad)
+          .input("Total", sql.Decimal(18, 6), nuevoTotal)
+          .query(
+            `UPDATE Tickets_Lineas SET Cantidad = @Cantidad, Total = @Total WHERE IdTicket = @IdTicket AND IdArticulo = @IdArticulo`,
+          );
 
-                console.log('Cantidad actualizada:', { cantidad, nuevoTotal });
-            }
-        }
-
-        // Invalidar caché de mesas
-        invalidarCacheMesas();
-
-        res.json({ success: true });
-
-        // Notificar a todos los clientes WebSocket
-        notificarClientes('mesa_actualizada', { idCliente });
-
-    } catch (err) {
-        console.error('Error al actualizar cantidad:', err);
-        res.status(500).json({ error: 'Error al actualizar cantidad', details: err.message });
+        console.log("Cantidad actualizada:", { cantidad, nuevoTotal });
+      }
     }
+
+    // Invalidar caché de mesas
+    invalidarCacheMesas();
+
+    res.json({ success: true });
+
+    // Notificar a todos los clientes WebSocket
+    notificarClientes("mesa_actualizada", { idCliente });
+  } catch (err) {
+    console.error("Error al actualizar cantidad:", err);
+    res
+      .status(500)
+      .json({ error: "Error al actualizar cantidad", details: err.message });
+  }
 });
 
 // Actualizar cantidad de un item por IdLinea (evita confusión con artículos duplicados)
-app.put('/api/mesas/:idCliente/items/:idLinea/cantidad-linea', async (req, res) => {
+app.put(
+  "/api/mesas/:idCliente/items/:idLinea/cantidad-linea",
+  async (req, res) => {
     try {
-        const idCliente = req.params.idCliente;
-        const idLinea = parseInt(req.params.idLinea);
-        const { cantidad } = req.body;
-        console.log('Actualizando cantidad por IdLinea:', { idCliente, idLinea, cantidad });
+      const idCliente = req.params.idCliente;
+      const idLinea = parseInt(req.params.idLinea);
+      const { cantidad } = req.body;
+      console.log("Actualizando cantidad por IdLinea:", {
+        idCliente,
+        idLinea,
+        cantidad,
+      });
 
-        const pool = await getConnection();
+      const pool = await getConnection();
 
-        // Buscar ticket activo para este cliente
-        const ticketResult = await pool.request()
-            .input('IdCliente', sql.VarChar(50), idCliente)
-            .query(`SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`);
+      // Buscar ticket activo para este cliente
+      const ticketResult = await pool
+        .request()
+        .input("IdCliente", sql.VarChar(50), idCliente)
+        .query(
+          `SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`,
+        );
 
-        const idTicket = ticketResult.recordset[0]?.IdTicket;
+      const idTicket = ticketResult.recordset[0]?.IdTicket;
 
-        if (!idTicket) {
-            return res.status(404).json({ error: 'No se encontró ticket activo' });
-        }
+      if (!idTicket) {
+        return res.status(404).json({ error: "No se encontró ticket activo" });
+      }
 
-        // Buscar la línea por IdLinea
-        const lineaResult = await pool.request()
-            .input('IdTicket', sql.Int, idTicket)
-            .input('IdLinea', sql.SmallInt, idLinea)
-            .query(`SELECT IdLinea, Precio FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
+      // Buscar la línea por IdLinea
+      const lineaResult = await pool
+        .request()
+        .input("IdTicket", sql.Int, idTicket)
+        .input("IdLinea", sql.SmallInt, idLinea)
+        .query(
+          `SELECT IdLinea, Precio FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`,
+        );
 
-        if (lineaResult.recordset.length === 0) {
-            return res.status(404).json({ error: 'Línea no encontrada' });
-        }
+      if (lineaResult.recordset.length === 0) {
+        return res.status(404).json({ error: "Línea no encontrada" });
+      }
 
-        const linea = lineaResult.recordset[0];
+      const linea = lineaResult.recordset[0];
 
-        if (cantidad <= 0) {
-            // Eliminar la línea si la cantidad llega a 0
-            await pool.request()
-                .input('IdTicket', sql.Int, idTicket)
-                .input('IdLinea', sql.SmallInt, idLinea)
-                .query(`DELETE FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
-            console.log('Línea eliminada por cantidad 0');
-        } else {
-            const nuevoTotal = cantidad * linea.Precio;
-            await pool.request()
-                .input('IdTicket', sql.Int, idTicket)
-                .input('IdLinea', sql.SmallInt, idLinea)
-                .input('Cantidad', sql.Decimal(18, 6), cantidad)
-                .input('Total', sql.Decimal(18, 6), nuevoTotal)
-                .query(`UPDATE Tickets_Lineas SET Cantidad = @Cantidad, Total = @Total WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
-            console.log('Cantidad actualizada por IdLinea:', { cantidad, nuevoTotal });
-        }
+      if (cantidad <= 0) {
+        // Eliminar la línea si la cantidad llega a 0
+        await pool
+          .request()
+          .input("IdTicket", sql.Int, idTicket)
+          .input("IdLinea", sql.SmallInt, idLinea)
+          .query(
+            `DELETE FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`,
+          );
+        console.log("Línea eliminada por cantidad 0");
+      } else {
+        const nuevoTotal = cantidad * linea.Precio;
+        await pool
+          .request()
+          .input("IdTicket", sql.Int, idTicket)
+          .input("IdLinea", sql.SmallInt, idLinea)
+          .input("Cantidad", sql.Decimal(18, 6), cantidad)
+          .input("Total", sql.Decimal(18, 6), nuevoTotal)
+          .query(
+            `UPDATE Tickets_Lineas SET Cantidad = @Cantidad, Total = @Total WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`,
+          );
+        console.log("Cantidad actualizada por IdLinea:", {
+          cantidad,
+          nuevoTotal,
+        });
+      }
 
-        // Invalidar caché de mesas
-        invalidarCacheMesas();
+      // Invalidar caché de mesas
+      invalidarCacheMesas();
 
-        res.json({ success: true });
+      res.json({ success: true });
 
-        // Notificar a todos los clientes WebSocket
-        notificarClientes('mesa_actualizada', { idCliente });
-
+      // Notificar a todos los clientes WebSocket
+      notificarClientes("mesa_actualizada", { idCliente });
     } catch (err) {
-        console.error('Error al actualizar cantidad por IdLinea:', err);
-        res.status(500).json({ error: 'Error al actualizar cantidad', details: err.message });
+      console.error("Error al actualizar cantidad por IdLinea:", err);
+      res
+        .status(500)
+        .json({ error: "Error al actualizar cantidad", details: err.message });
     }
-});
+  },
+);
 
 // Actualizar observaciones de un item (línea de ticket)
-app.put('/api/tickets/:idTicket/lineas/:idLinea/observaciones', async (req, res) => {
+app.put(
+  "/api/tickets/:idTicket/lineas/:idLinea/observaciones",
+  async (req, res) => {
     try {
-        const idTicket = req.params.idTicket;
-        const idLinea = req.params.idLinea;
-        const { observaciones } = req.body;
-        console.log('Actualizando observaciones:', { idTicket, idLinea, observaciones });
+      const idTicket = req.params.idTicket;
+      const idLinea = req.params.idLinea;
+      const { observaciones } = req.body;
+      console.log("Actualizando observaciones:", {
+        idTicket,
+        idLinea,
+        observaciones,
+      });
 
-        const pool = await getConnection();
+      const pool = await getConnection();
 
-        // Actualizar observaciones en la línea del ticket
-        await pool.request()
-            .input('IdTicket', sql.Int, idTicket)
-            .input('IdLinea', sql.SmallInt, idLinea)
-            .input('Observaciones', sql.VarChar(250), observaciones || null)
-            .query(`UPDATE Tickets_Lineas SET Observaciones = @Observaciones WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
+      // Actualizar observaciones en la línea del ticket
+      await pool
+        .request()
+        .input("IdTicket", sql.Int, idTicket)
+        .input("IdLinea", sql.SmallInt, idLinea)
+        .input("Observaciones", sql.VarChar(250), observaciones || null)
+        .query(
+          `UPDATE Tickets_Lineas SET Observaciones = @Observaciones WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`,
+        );
 
-        console.log('Observaciones actualizadas');
+      console.log("Observaciones actualizadas");
 
-        // Invalidar caché de mesas
-        invalidarCacheMesas();
+      // Invalidar caché de mesas
+      invalidarCacheMesas();
 
-        res.json({ success: true });
-
+      res.json({ success: true });
     } catch (err) {
-        console.error('Error al actualizar observaciones:', err);
-        res.status(500).json({ error: 'Error al actualizar observaciones', details: err.message });
+      console.error("Error al actualizar observaciones:", err);
+      res.status(500).json({
+        error: "Error al actualizar observaciones",
+        details: err.message,
+      });
     }
+  },
+);
+
+// Actualizar precio de un item (línea de ticket manual)
+app.put("/api/tickets/:idTicket/lineas/:idLinea/precio", async (req, res) => {
+  try {
+    const idTicket = req.params.idTicket;
+    const idLinea = req.params.idLinea;
+    const { precio } = req.body;
+    console.log("Actualizando precio manual:", { idTicket, idLinea, precio });
+
+    const pool = await getConnection();
+
+    // Actualizar precio y total en la línea del ticket
+    await pool
+      .request()
+      .input("IdTicket", sql.Int, idTicket)
+      .input("IdLinea", sql.SmallInt, idLinea)
+      .input("PrecioFinal", sql.Decimal(18, 6), precio).query(`
+                UPDATE tl
+                SET Precio = @PrecioFinal / (1 + ISNULL(i.Porcentaje, 0) / 100), 
+                    PVP = @PrecioFinal / (1 + ISNULL(i.Porcentaje, 0) / 100), 
+                    Total = tl.Cantidad * (@PrecioFinal / (1 + ISNULL(i.Porcentaje, 0) / 100)), 
+                    PVP_MONEDA = @PrecioFinal / (1 + ISNULL(i.Porcentaje, 0) / 100), 
+                    TOTAL_PVP_MONEDA = tl.Cantidad * (@PrecioFinal / (1 + ISNULL(i.Porcentaje, 0) / 100))
+                FROM Tickets_Lineas tl
+                LEFT JOIN Ivas i ON tl.IdIVA = i.IdIva
+                WHERE tl.IdTicket = @IdTicket AND tl.IdLinea = @IdLinea
+            `);
+
+    console.log("Precio modificado exitosamente");
+
+    // Invalidar caché de mesas
+    invalidarCacheMesas();
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error al actualizar precio:", err);
+    res.status(500).json({
+      error: "Error al actualizar precio manual",
+      details: err.message,
+    });
+  }
 });
 
+// Actualizar cantidad de un item (línea de ticket manual)
+app.put("/api/tickets/:idTicket/lineas/:idLinea/cantidad", async (req, res) => {
+  try {
+    const idTicket = req.params.idTicket;
+    const idLinea = req.params.idLinea;
+    const { cantidad } = req.body;
+    console.log("Actualizando cantidad manual:", {
+      idTicket,
+      idLinea,
+      cantidad,
+    });
+
+    const pool = await getConnection();
+
+    // Actualizar cantidad y recalcular total en Tickets_Lineas usando la cantidad nueva y el Precio SIN Iva que haya guardado
+    await pool
+      .request()
+      .input("IdTicket", sql.Int, idTicket)
+      .input("IdLinea", sql.SmallInt, idLinea)
+      .input("Cantidad", sql.Decimal(18, 6), cantidad).query(`
+                UPDATE Tickets_Lineas 
+                SET Cantidad = @Cantidad, 
+                    Total = @Cantidad * Precio, 
+                    TOTAL_PVP_MONEDA = @Cantidad * Precio 
+                WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea
+            `);
+
+    console.log("Cantidad modificada exitosamente");
+
+    // Invalidar caché de mesas
+    invalidarCacheMesas();
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error al actualizar cantidad:", err);
+    res.status(500).json({
+      error: "Error al actualizar cantidad manual",
+      details: err.message,
+    });
+  }
+});
 
 // Eliminar item de mesa (en BD - Tickets_Lineas) - USA IdLinea para eliminar líneas específicas
-app.delete('/api/mesas/:idCliente/items/:idLinea', async (req, res) => {
-    try {
-        const idCliente = req.params.idCliente;
-        const idLinea = parseInt(req.params.idLinea);
-        console.log('Eliminando item:', { idCliente, idLinea });
+app.delete("/api/mesas/:idCliente/items/:idLinea", async (req, res) => {
+  try {
+    const idCliente = req.params.idCliente;
+    const idLinea = parseInt(req.params.idLinea);
+    console.log("Eliminando item:", { idCliente, idLinea });
 
-        const pool = await getConnection();
+    const pool = await getConnection();
 
-        // Buscar ticket activo para este cliente
-        const ticketResult = await pool.request()
-            .input('IdCliente', sql.VarChar(50), idCliente)
-            .query(`SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`);
+    // Buscar ticket activo para este cliente
+    const ticketResult = await pool
+      .request()
+      .input("IdCliente", sql.VarChar(50), idCliente)
+      .query(
+        `SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`,
+      );
 
-        const idTicket = ticketResult.recordset[0]?.IdTicket;
+    const idTicket = ticketResult.recordset[0]?.IdTicket;
 
-        if (idTicket) {
-            // Buscar la línea específica por IdLinea
-            const lineaResult = await pool.request()
-                .input('IdTicket', sql.Int, idTicket)
-                .input('IdLinea', sql.SmallInt, idLinea)
-                .query(`SELECT IdLinea, Cantidad, Precio FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
+    if (idTicket) {
+      // Buscar la línea específica por IdLinea
+      const lineaResult = await pool
+        .request()
+        .input("IdTicket", sql.Int, idTicket)
+        .input("IdLinea", sql.SmallInt, idLinea)
+        .query(
+          `SELECT IdLinea, Cantidad, Precio FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`,
+        );
 
-            if (lineaResult.recordset.length > 0) {
-                const linea = lineaResult.recordset[0];
-                if (linea.Cantidad > 1) {
-                    // Reducir cantidad
-                    const nuevaCantidad = linea.Cantidad - 1;
-                    const nuevoTotal = nuevaCantidad * linea.Precio;
-                    await pool.request()
-                        .input('IdTicket', sql.Int, idTicket)
-                        .input('IdLinea', sql.SmallInt, idLinea)
-                        .input('Cantidad', sql.Decimal(10, 2), nuevaCantidad)
-                        .input('Total', sql.Decimal(10, 2), nuevoTotal)
-                        .query(`UPDATE Tickets_Lineas SET Cantidad = @Cantidad, Total = @Total WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
-                    console.log('Cantidad reducida');
-                } else {
-                    // Eliminar línea específica
-                    await pool.request()
-                        .input('IdTicket', sql.Int, idTicket)
-                        .input('IdLinea', sql.SmallInt, idLinea)
-                        .query(`DELETE FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`);
-                    console.log('Línea eliminada');
-                }
-            }
+      if (lineaResult.recordset.length > 0) {
+        const linea = lineaResult.recordset[0];
+        if (linea.Cantidad > 1) {
+          // Reducir cantidad
+          const nuevaCantidad = linea.Cantidad - 1;
+          const nuevoTotal = nuevaCantidad * linea.Precio;
+          await pool
+            .request()
+            .input("IdTicket", sql.Int, idTicket)
+            .input("IdLinea", sql.SmallInt, idLinea)
+            .input("Cantidad", sql.Decimal(10, 2), nuevaCantidad)
+            .input("Total", sql.Decimal(10, 2), nuevoTotal)
+            .query(
+              `UPDATE Tickets_Lineas SET Cantidad = @Cantidad, Total = @Total WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`,
+            );
+          console.log("Cantidad reducida");
+        } else {
+          // Eliminar línea específica
+          await pool
+            .request()
+            .input("IdTicket", sql.Int, idTicket)
+            .input("IdLinea", sql.SmallInt, idLinea)
+            .query(
+              `DELETE FROM Tickets_Lineas WHERE IdTicket = @IdTicket AND IdLinea = @IdLinea`,
+            );
+          console.log("Línea eliminada");
         }
-
-        console.log('Item eliminado');
-
-        // Invalidar caché de mesas
-        invalidarCacheMesas();
-
-        res.json({ success: true });
-
-        // Notificar a todos los clientes WebSocket
-        notificarClientes('mesa_actualizada', { idCliente });
-
-    } catch (err) {
-        console.error('Error al eliminar item:', err);
-        res.status(500).json({ error: 'Error al eliminar item', details: err.message });
+      }
     }
+
+    console.log("Item eliminado");
+
+    // Invalidar caché de mesas
+    invalidarCacheMesas();
+
+    res.json({ success: true });
+
+    // Notificar a todos los clientes WebSocket
+    notificarClientes("mesa_actualizada", { idCliente });
+  } catch (err) {
+    console.error("Error al eliminar item:", err);
+    res
+      .status(500)
+      .json({ error: "Error al eliminar item", details: err.message });
+  }
 });
 
 // Limpiar mesa (eliminar ticket y sus líneas de la BD)
-app.post('/api/mesas/:idCliente/cerrar', async (req, res) => {
-    try {
-        const idCliente = req.params.idCliente;
-        console.log('Cerrando mesa:', idCliente);
+app.post("/api/mesas/:idCliente/cerrar", async (req, res) => {
+  try {
+    const idCliente = req.params.idCliente;
+    console.log("Cerrando mesa:", idCliente);
 
-        const pool = await getConnection();
+    const pool = await getConnection();
 
-        // Buscar ticket activo para este cliente
-        const ticketResult = await pool.request()
-            .input('IdCliente', sql.VarChar(50), idCliente)
-            .query(`SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`);
+    // Buscar ticket activo para este cliente
+    const ticketResult = await pool
+      .request()
+      .input("IdCliente", sql.VarChar(50), idCliente)
+      .query(
+        `SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`,
+      );
 
-        const idTicket = ticketResult.recordset[0]?.IdTicket;
+    const idTicket = ticketResult.recordset[0]?.IdTicket;
 
-        if (idTicket) {
-            // Eliminar líneas primero
-            await pool.request()
-                .input('IdTicket', sql.Int, idTicket)
-                .query(`DELETE FROM Tickets_Lineas WHERE IdTicket = @IdTicket`);
+    if (idTicket) {
+      // Eliminar líneas primero
+      await pool
+        .request()
+        .input("IdTicket", sql.Int, idTicket)
+        .query(`DELETE FROM Tickets_Lineas WHERE IdTicket = @IdTicket`);
 
-            // Eliminar ticket
-            await pool.request()
-                .input('IdTicket', sql.Int, idTicket)
-                .query(`DELETE FROM Tickets WHERE IdTicket = @IdTicket`);
+      // Eliminar ticket
+      await pool
+        .request()
+        .input("IdTicket", sql.Int, idTicket)
+        .query(`DELETE FROM Tickets WHERE IdTicket = @IdTicket`);
 
-            console.log('Ticket y líneas eliminados');
-        }
-
-        console.log('Mesa cerrada exitosamente');
-
-        // Invalidar caché de mesas
-        invalidarCacheMesas();
-
-        res.json({ success: true });
-
-        // Notificar a todos los clientes WebSocket
-        notificarClientes('mesa_actualizada', { idCliente });
-
-    } catch (err) {
-        console.error('Error al cerrar mesa:', err);
-        res.status(500).json({ error: 'Error al cerrar mesa', details: err.message });
+      console.log("Ticket y líneas eliminados");
     }
+
+    console.log("Mesa cerrada exitosamente");
+
+    // Invalidar caché de mesas
+    invalidarCacheMesas();
+
+    res.json({ success: true });
+
+    // Notificar a todos los clientes WebSocket
+    notificarClientes("mesa_actualizada", { idCliente });
+  } catch (err) {
+    console.error("Error al cerrar mesa:", err);
+    res
+      .status(500)
+      .json({ error: "Error al cerrar mesa", details: err.message });
+  }
 });
 
 // =============================================
 // RUTAS API - ARTÍCULOS
 // =============================================
 
-app.get('/api/articulos', async (req, res) => {
-    try {
-        const pool = await getConnection();
-        const idLista = parseInt(req.query.idLista) || 1;
-        console.log('Obteniendo artículos con IdLista:', idLista);
+app.get("/api/articulos", async (req, res) => {
+  try {
+    const pool = await getConnection();
+    const idLista = parseInt(req.query.idLista) || 1;
+    console.log("Obteniendo artículos con IdLista:", idLista);
 
-        const result = await pool.request()
-            .input('IdLista', sql.Int, idLista)
-            .query(`
+    const result = await pool.request().input("IdLista", sql.Int, idLista)
+      .query(`
             SELECT
                 a.iDaRTICULO,
                 art.DESCRIP,
                 a.DESCRIPFAMILIA,
-                P.PRECIO
+                P.PRECIO,
+                a.orden
             FROM pers_OrdenArticulosTPV a
             LEFT JOIN Articulos art ON a.iDaRTICULO = art.IdArticulo
             LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo AND p.IdLista = @IdLista
-            WHERE a.IDCAJA = ${TPV_CONFIG.IdCaja}
-            ORDER BY a.DESCRIPFAMILIA, art.DESCRIP
+            WHERE a.IDCAJA = ${TPV_CONFIG.IdCaja} AND (art.estado IS NULL OR art.estado = 0)
+            ORDER BY a.DESCRIPFAMILIA, a.orden, art.DESCRIP
         `);
 
-        console.log('Artículos obtenidos:', result.recordset.length);
-        res.json(result.recordset);
-    } catch (err) {
-        console.error('Error al obtener artículos:', err);
-        res.status(500).json({ error: 'Error al obtener artículos', details: err.message });
-    }
+    console.log("Artículos obtenidos:", result.recordset.length);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("Error al obtener artículos:", err);
+    res
+      .status(500)
+      .json({ error: "Error al obtener artículos", details: err.message });
+  }
 });
 
 // Obtener productos favoritos
-app.get('/api/favoritos', async (req, res) => {
-    try {
-        const pool = await getConnection();
-        console.log('🌟 Obteniendo productos favoritos...');
-        console.log('🌟 IdCaja configurado:', TPV_CONFIG.IdCaja);
+app.get("/api/favoritos", async (req, res) => {
+  try {
+    const pool = await getConnection();
+    console.log("🌟 Obteniendo productos favoritos...");
+    console.log("🌟 IdCaja configurado:", TPV_CONFIG.IdCaja);
 
-        // Primero verificar que existen favoritos
-        const testQuery = await pool.request().query(`
+    // Primero verificar que existen favoritos
+    const testQuery = await pool.request().query(`
             SELECT COUNT(*) as total FROM TPV_Cajas_Favoritos_Asociados WHERE IdCaja = ${TPV_CONFIG.IdCaja}
         `);
-        console.log('🌟 Total favoritos en tabla:', testQuery.recordset[0].total);
+    console.log("🌟 Total favoritos en tabla:", testQuery.recordset[0].total);
 
-        const idLista = parseInt(req.query.idLista) || 1;
-        console.log('🌟 Obteniendo favoritos con IdLista:', idLista);
+    const idLista = parseInt(req.query.idLista) || 1;
+    console.log("🌟 Obteniendo favoritos con IdLista:", idLista);
 
-        // Consulta principal con LEFT JOIN para diagnóstico
-        const result = await pool.request()
-            .input('IdLista', sql.Int, idLista)
-            .query(`
+    // Consulta principal con LEFT JOIN para diagnóstico
+    const result = await pool.request().input("IdLista", sql.Int, idLista)
+      .query(`
             SELECT
                 f.IdArticulo,
                 a.iDaRTICULO,
@@ -948,183 +1172,200 @@ app.get('/api/favoritos', async (req, res) => {
             LEFT JOIN pers_OrdenArticulosTPV a ON f.IdArticulo = a.iDaRTICULO AND a.IDCAJA = ${TPV_CONFIG.IdCaja}
             LEFT JOIN Articulos art ON f.IdArticulo = art.IdArticulo
             LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo AND p.IdLista = @IdLista
-            WHERE f.IdCaja = ${TPV_CONFIG.IdCaja}
+            WHERE f.IdCaja = ${TPV_CONFIG.IdCaja} AND (art.estado IS NULL OR art.estado = 0)
             ORDER BY art.DESCRIP
         `);
 
-        console.log('🌟 Productos favoritos obtenidos:', result.recordset.length);
-        if (result.recordset.length > 0) {
-            console.log('🌟 Primeros 3 favoritos (raw):', result.recordset.slice(0, 3));
-        } else {
-            console.log('⚠️ No se encontraron favoritos. Verificando tabla...');
-            // Consulta de diagnóstico
-            const diagnostico = await pool.request().query(`
+    console.log("🌟 Productos favoritos obtenidos:", result.recordset.length);
+    if (result.recordset.length > 0) {
+      console.log(
+        "🌟 Primeros 3 favoritos (raw):",
+        result.recordset.slice(0, 3),
+      );
+    } else {
+      console.log("⚠️ No se encontraron favoritos. Verificando tabla...");
+      // Consulta de diagnóstico
+      const diagnostico = await pool.request().query(`
                 SELECT COUNT(*) as total FROM TPV_Cajas_Favoritos_Asociados WHERE IdCaja = ${TPV_CONFIG.IdCaja}
             `);
-            console.log('⚠️ Total de favoritos en la tabla para IdCaja ${TPV_CONFIG.IdCaja}:', diagnostico.recordset[0].total);
-        }
-
-        // Filtrar los que tienen precio (que se encontraron en las otras tablas)
-        const favoritosValidos = result.recordset.filter(item => item.PRECIO != null);
-        console.log('🌟 Favoritos válidos con precio:', favoritosValidos.length);
-
-        res.json(favoritosValidos);
-    } catch (err) {
-        console.error('❌ Error al obtener favoritos:', err);
-        res.status(500).json({ error: 'Error al obtener favoritos', details: err.message });
+      console.log(
+        "⚠️ Total de favoritos en la tabla para IdCaja ${TPV_CONFIG.IdCaja}:",
+        diagnostico.recordset[0].total,
+      );
     }
+
+    // Filtrar los que tienen precio (que se encontraron en las otras tablas)
+    const favoritosValidos = result.recordset.filter(
+      (item) => item.PRECIO != null,
+    );
+    console.log("🌟 Favoritos válidos con precio:", favoritosValidos.length);
+
+    res.json(favoritosValidos);
+  } catch (err) {
+    console.error("❌ Error al obtener favoritos:", err);
+    res
+      .status(500)
+      .json({ error: "Error al obtener favoritos", details: err.message });
+  }
 });
 
 // Obtener complementos para un artículo
-app.get('/api/articulos/:idArticulo/complementos', async (req, res) => {
-    try {
-        const idArticulo = req.params.idArticulo;
-        const pool = await getConnection();
-        console.log('🔧 Obteniendo complementos para artículo:', idArticulo);
+app.get("/api/articulos/:idArticulo/complementos", async (req, res) => {
+  try {
+    const idArticulo = req.params.idArticulo;
+    const pool = await getConnection();
+    console.log("🔧 Obteniendo complementos para artículo:", idArticulo);
 
-        const result = await pool.request()
-            .input('IdArticulo', sql.VarChar(50), idArticulo)
-            .query(`
+    const result = await pool
+      .request()
+      .input("IdArticulo", sql.VarChar(50), idArticulo).query(`
                 SELECT pcca.idarticulo, pcc.nombre 
                 FROM Pers_comandas_complementos_articulos pcca 
                 INNER JOIN Pers_comandas_complementos pcc ON pcca.idcomplemento = pcc.id
                 WHERE pcca.idarticulo = @IdArticulo
             `);
 
-        console.log('🔧 Complementos obtenidos:', result.recordset.length);
-        res.json(result.recordset);
-    } catch (err) {
-        console.error('❌ Error al obtener complementos:', err);
-        res.status(500).json({ error: 'Error al obtener complementos', details: err.message });
-    }
+    console.log("🔧 Complementos obtenidos:", result.recordset.length);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("❌ Error al obtener complementos:", err);
+    res
+      .status(500)
+      .json({ error: "Error al obtener complementos", details: err.message });
+  }
 });
-
-
 
 // =============================================
 // RUTAS API - TICKETS (crear en tablas TPV)
 // =============================================
 
 // Ruta temporal para debug - ver estructura de tickets
-app.get('/api/tickets/debug', async (req, res) => {
-    try {
-        const pool = await getConnection();
+app.get("/api/tickets/debug", async (req, res) => {
+  try {
+    const pool = await getConnection();
 
-        const columnsResult = await pool.request().query(`
+    const columnsResult = await pool.request().query(`
             SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
             FROM INFORMATION_SCHEMA.COLUMNS 
             WHERE TABLE_NAME = 'Tickets'
             ORDER BY ORDINAL_POSITION
         `);
 
-        const exampleResult = await pool.request().query(`
+    const exampleResult = await pool.request().query(`
             SELECT TOP 1 * FROM Tickets ORDER BY IdTicket DESC
         `);
 
-        res.json({
-            columns: columnsResult.recordset,
-            example: exampleResult.recordset[0] || null
-        });
-    } catch (err) {
-        console.error('Error debug:', err);
-        res.status(500).json({ error: err.message });
-    }
+    res.json({
+      columns: columnsResult.recordset,
+      example: exampleResult.recordset[0] || null,
+    });
+  } catch (err) {
+    console.error("Error debug:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Ruta temporal para debug - ver estructura de Tickets_Lineas
-app.get('/api/tickets_lineas/debug', async (req, res) => {
-    try {
-        const pool = await getConnection();
+app.get("/api/tickets_lineas/debug", async (req, res) => {
+  try {
+    const pool = await getConnection();
 
-        const columnsResult = await pool.request().query(`
+    const columnsResult = await pool.request().query(`
             SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
             FROM INFORMATION_SCHEMA.COLUMNS 
             WHERE TABLE_NAME = 'Tickets_Lineas'
             ORDER BY ORDINAL_POSITION
         `);
 
-        const exampleResult = await pool.request().query(`
+    const exampleResult = await pool.request().query(`
             SELECT TOP 1 * FROM Tickets_Lineas ORDER BY IdTicket DESC
         `);
 
-        res.json({
-            columns: columnsResult.recordset,
-            example: exampleResult.recordset[0] || null
-        });
-    } catch (err) {
-        console.error('Error debug:', err);
-        res.status(500).json({ error: err.message });
-    }
+    res.json({
+      columns: columnsResult.recordset,
+      example: exampleResult.recordset[0] || null,
+    });
+  } catch (err) {
+    console.error("Error debug:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Ruta temporal para debug - ver empleados
-app.get('/api/empleados/debug', async (req, res) => {
-    try {
-        const pool = await getConnection();
-        const result = await pool.request().query(`
+app.get("/api/empleados/debug", async (req, res) => {
+  try {
+    const pool = await getConnection();
+    const result = await pool.request().query(`
             SELECT TOP 10 IdEmpleado, Empleado FROM Empleados_Datos ORDER BY IdEmpleado
         `);
-        res.json(result.recordset);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/tickets', async (req, res) => {
-    console.log('=== CREANDO TICKET EN TPV ===');
-    console.log('Body:', req.body);
+app.post("/api/tickets", async (req, res) => {
+  console.log("=== CREANDO TICKET EN TPV ===");
+  console.log("Body:", req.body);
 
-    const idCliente = String(req.body.idCliente);
-    console.log('idCliente:', idCliente);
+  const idCliente = String(req.body.idCliente);
+  console.log("idCliente:", idCliente);
 
-    const pool = await getConnection();
+  const pool = await getConnection();
 
-    try {
-        // Buscar ticket existente para este cliente con sus items
-        const ticketResult = await pool.request()
-            .input('IdCliente', sql.VarChar(50), idCliente)
-            .query(`SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`);
+  try {
+    // Buscar ticket existente para este cliente con sus items
+    const ticketResult = await pool
+      .request()
+      .input("IdCliente", sql.VarChar(50), idCliente)
+      .query(
+        `SELECT TOP 1 IdTicket FROM Tickets WHERE IdCliente = @IdCliente ORDER BY Fecha DESC`,
+      );
 
-        const idTicketExistente = ticketResult.recordset[0]?.IdTicket;
+    const idTicketExistente = ticketResult.recordset[0]?.IdTicket;
 
-        if (!idTicketExistente) {
-            console.log('ERROR: No hay ticket para este cliente');
-            return res.status(400).json({ error: 'No hay ticket para este cliente' });
-        }
+    if (!idTicketExistente) {
+      console.log("ERROR: No hay ticket para este cliente");
+      return res.status(400).json({ error: "No hay ticket para este cliente" });
+    }
 
-        // Obtener los items del ticket desde la BD
-        const itemsResult = await pool.request()
-            .input('IdTicket', sql.Int, idTicketExistente)
-            .query(`
+    // Obtener los items del ticket desde la BD
+    const itemsResult = await pool
+      .request()
+      .input("IdTicket", sql.Int, idTicketExistente).query(`
                 SELECT IdArticulo as id, Cantidad as cantidad, Precio as precio, Total as total
                 FROM Tickets_Lineas
                 WHERE IdTicket = @IdTicket
             `);
 
-        const items = itemsResult.recordset;
-        console.log('Items encontrados en BD:', items.length);
+    const items = itemsResult.recordset;
+    console.log("Items encontrados en BD:", items.length);
 
-        if (items.length === 0) {
-            console.log('ERROR: No hay items en el ticket');
-            return res.status(400).json({ error: 'No hay items en el pedido' });
-        }
-
-        // Calcular el total
-        const totalPedido = items.reduce((sum, item) => sum + parseFloat(item.total), 0);
-
-        console.log('=== TICKET YA EXISTE EN TPV ===');
-        console.log('IdTicket:', idTicketExistente, 'Total:', totalPedido);
-
-        res.json({
-            success: true,
-            IdTicket: idTicketExistente,
-            Total: totalPedido
-        });
-
-    } catch (err) {
-        console.error('ERROR PROCESANDO TICKET:', err);
-        res.status(500).json({ error: 'Error al procesar el ticket', details: err.message });
+    if (items.length === 0) {
+      console.log("ERROR: No hay items en el ticket");
+      return res.status(400).json({ error: "No hay items en el pedido" });
     }
+
+    // Calcular el total
+    const totalPedido = items.reduce(
+      (sum, item) => sum + parseFloat(item.total),
+      0,
+    );
+
+    console.log("=== TICKET YA EXISTE EN TPV ===");
+    console.log("IdTicket:", idTicketExistente, "Total:", totalPedido);
+
+    res.json({
+      success: true,
+      IdTicket: idTicketExistente,
+      Total: totalPedido,
+    });
+  } catch (err) {
+    console.error("ERROR PROCESANDO TICKET:", err);
+    res
+      .status(500)
+      .json({ error: "Error al procesar el ticket", details: err.message });
+  }
 });
 
 // =============================================
@@ -1132,173 +1373,183 @@ app.post('/api/tickets', async (req, res) => {
 // =============================================
 
 // Obtener lista de impresoras activas
-app.get('/api/impresoras', async (req, res) => {
-    try {
-        const pool = await getConnection();
-        console.log('🖨️  Obteniendo impresoras...');
+app.get("/api/impresoras", async (req, res) => {
+  try {
+    const pool = await getConnection();
+    console.log("🖨️  Obteniendo impresoras...");
 
-        // Verificar si la tabla existe
-        const tableCheck = await pool.request().query(`
+    // Verificar si la tabla existe
+    const tableCheck = await pool.request().query(`
             SELECT COUNT(*) as tableExists
             FROM INFORMATION_SCHEMA.TABLES
             WHERE TABLE_NAME = 'Pers_comandas_impresoras'
         `);
 
-        if (tableCheck.recordset[0].tableExists === 0) {
-            console.log('⚠️  Tabla Pers_comandas_impresoras no existe. Devolviendo array vacío.');
-            return res.json([]);
-        }
+    if (tableCheck.recordset[0].tableExists === 0) {
+      console.log(
+        "⚠️  Tabla Pers_comandas_impresoras no existe. Devolviendo array vacío.",
+      );
+      return res.json([]);
+    }
 
-        // Obtener solo impresoras activas
-        const result = await pool.request().query(`
+    // Obtener solo impresoras activas
+    const result = await pool.request().query(`
             SELECT Id, Nombre, IP, Puerto
             FROM Pers_comandas_impresoras
             WHERE Activo = 1
             ORDER BY Nombre
         `);
 
-        console.log('🖨️  Impresoras obtenidas:', result.recordset.length);
-        res.json(result.recordset);
-    } catch (err) {
-        console.error('❌ Error al obtener impresoras:', err);
-        console.error('❌ Error details:', err.message);
-        // Si hay error, devolver array vacío en lugar de 500
-        res.json([]);
-    }
+    console.log("🖨️  Impresoras obtenidas:", result.recordset.length);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("❌ Error al obtener impresoras:", err);
+    console.error("❌ Error details:", err.message);
+    // Si hay error, devolver array vacío en lugar de 500
+    res.json([]);
+  }
 });
 
 // Test de conectividad de impresoras
-app.get('/api/impresoras/test', async (req, res) => {
-    try {
-        const pool = await getConnection();
-        const net = require('net');
+app.get("/api/impresoras/test", async (req, res) => {
+  try {
+    const pool = await getConnection();
+    const net = require("net");
 
-        // Obtener todas las impresoras activas
-        const result = await pool.request().query(`
+    // Obtener todas las impresoras activas
+    const result = await pool.request().query(`
             SELECT Id, Nombre, IP, Puerto
             FROM Pers_comandas_impresoras
             WHERE Activo = 1
             ORDER BY Nombre
         `);
 
-        const impresoras = result.recordset;
-        const resultados = [];
+    const impresoras = result.recordset;
+    const resultados = [];
 
-        // Probar conectividad con cada impresora
-        for (const impresora of impresoras) {
-            const puerto = impresora.Puerto || 9100;
+    // Probar conectividad con cada impresora
+    for (const impresora of impresoras) {
+      const puerto = impresora.Puerto || 9100;
 
-            try {
-                await new Promise((resolve, reject) => {
-                    const client = new net.Socket();
-                    const timeout = setTimeout(() => {
-                        client.destroy();
-                        reject(new Error('Timeout'));
-                    }, 3000);
+      try {
+        await new Promise((resolve, reject) => {
+          const client = new net.Socket();
+          const timeout = setTimeout(() => {
+            client.destroy();
+            reject(new Error("Timeout"));
+          }, 3000);
 
-                    client.connect(puerto, impresora.IP, () => {
-                        clearTimeout(timeout);
-                        client.end();
-                        resolve();
-                    });
+          client.connect(puerto, impresora.IP, () => {
+            clearTimeout(timeout);
+            client.end();
+            resolve();
+          });
 
-                    client.on('close', () => {
-                        resolve();
-                    });
+          client.on("close", () => {
+            resolve();
+          });
 
-                    client.on('error', (err) => {
-                        clearTimeout(timeout);
-                        client.destroy();
-                        reject(err);
-                    });
-                });
+          client.on("error", (err) => {
+            clearTimeout(timeout);
+            client.destroy();
+            reject(err);
+          });
+        });
 
-                resultados.push({
-                    id: impresora.Id,
-                    nombre: impresora.Nombre,
-                    ip: impresora.IP,
-                    puerto: puerto,
-                    estado: 'CONECTADA ✅',
-                    disponible: true
-                });
-
-            } catch (err) {
-                resultados.push({
-                    id: impresora.Id,
-                    nombre: impresora.Nombre,
-                    ip: impresora.IP,
-                    puerto: puerto,
-                    estado: `ERROR ❌: ${err.message}`,
-                    disponible: false,
-                    error: err.code || err.message
-                });
-            }
-        }
-
-        res.json(resultados);
-
-    } catch (err) {
-        console.error('❌ Error al probar impresoras:', err);
-        res.status(500).json({ error: 'Error al probar impresoras', details: err.message });
+        resultados.push({
+          id: impresora.Id,
+          nombre: impresora.Nombre,
+          ip: impresora.IP,
+          puerto: puerto,
+          estado: "CONECTADA ✅",
+          disponible: true,
+        });
+      } catch (err) {
+        resultados.push({
+          id: impresora.Id,
+          nombre: impresora.Nombre,
+          ip: impresora.IP,
+          puerto: puerto,
+          estado: `ERROR ❌: ${err.message}`,
+          disponible: false,
+          error: err.code || err.message,
+        });
+      }
     }
+
+    res.json(resultados);
+  } catch (err) {
+    console.error("❌ Error al probar impresoras:", err);
+    res
+      .status(500)
+      .json({ error: "Error al probar impresoras", details: err.message });
+  }
 });
 
 // Imprimir ticket en impresoras seleccionadas
-app.post('/api/tickets/:idTicket/imprimir', async (req, res) => {
-    console.log('=== IMPRIMIENDO TICKET ===');
-    console.log('IdTicket:', req.params.idTicket);
-    console.log('Impresoras:', req.body.impresoras);
+app.post("/api/tickets/:idTicket/imprimir", async (req, res) => {
+  console.log("=== IMPRIMIENDO TICKET ===");
+  console.log("IdTicket:", req.params.idTicket);
+  console.log("Impresoras:", req.body.impresoras);
 
-    const idTicket = parseInt(req.params.idTicket);
-    const impresorasIds = req.body.impresoras || [];
-    const nombreEmpleado = req.body.nombreEmpleado || '';
+  const idTicket = parseInt(req.params.idTicket);
+  const impresorasIds = req.body.impresoras || [];
+  const nombreEmpleado = req.body.nombreEmpleado || "";
+  const lineasTachadas = req.body.lineasTachadas || []; // IdLineas marcadas como tachadas
 
-    if (!idTicket || impresorasIds.length === 0) {
-        return res.status(400).json({ error: 'Faltan parámetros' });
-    }
+  if (!idTicket || impresorasIds.length === 0) {
+    return res.status(400).json({ error: "Faltan parámetros" });
+  }
 
-    try {
-        const pool = await getConnection();
-        const net = require('net');
+  try {
+    const pool = await getConnection();
+    const net = require("net");
 
-        // Obtener información del ticket
-        const ticketResult = await pool.request()
-            .input('IdTicket', sql.Int, idTicket)
-            .query(`
+    // Obtener información del ticket
+    const ticketResult = await pool
+      .request()
+      .input("IdTicket", sql.Int, idTicket).query(`
                 SELECT t.IdTicket, t.IdCliente, t.Fecha, c.cliente as NombreMesa
                 FROM Tickets t
                 INNER JOIN Clientes_Datos c ON t.IdCliente = c.IdCliente
                 WHERE t.IdTicket = @IdTicket
             `);
 
-        if (ticketResult.recordset.length === 0) {
-            return res.status(404).json({ error: 'Ticket no encontrado' });
+    if (ticketResult.recordset.length === 0) {
+      return res.status(404).json({ error: "Ticket no encontrado" });
+    }
+
+    const ticket = ticketResult.recordset[0];
+
+    // Para cada impresora seleccionada
+    const resultados = [];
+    for (const idImpresora of impresorasIds) {
+      try {
+        // Obtener datos de la impresora
+        const impresoraResult = await pool
+          .request()
+          .input("Id", sql.Int, idImpresora)
+          .query(
+            `SELECT Nombre, IP, Puerto FROM Pers_comandas_impresoras WHERE Id = @Id`,
+          );
+
+        if (impresoraResult.recordset.length === 0) {
+          resultados.push({
+            idImpresora,
+            success: false,
+            error: "Impresora no encontrada",
+          });
+          continue;
         }
 
-        const ticket = ticketResult.recordset[0];
+        const impresora = impresoraResult.recordset[0];
+        const puerto = impresora.Puerto || 9100;
 
-        // Para cada impresora seleccionada
-        const resultados = [];
-        for (const idImpresora of impresorasIds) {
-            try {
-                // Obtener datos de la impresora
-                const impresoraResult = await pool.request()
-                    .input('Id', sql.Int, idImpresora)
-                    .query(`SELECT Nombre, IP, Puerto FROM Pers_comandas_impresoras WHERE Id = @Id`);
-
-                if (impresoraResult.recordset.length === 0) {
-                    resultados.push({ idImpresora, success: false, error: 'Impresora no encontrada' });
-                    continue;
-                }
-
-                const impresora = impresoraResult.recordset[0];
-                const puerto = impresora.Puerto || 9100;
-
-                // Obtener artículos del ticket que corresponden a esta impresora
-                const articulosResult = await pool.request()
-                    .input('IdTicket', sql.Int, idTicket)
-                    .input('IdImpresora', sql.Int, idImpresora)
-                    .query(`
+        // Obtener artículos del ticket que corresponden a esta impresora
+        const articulosResult = await pool
+          .request()
+          .input("IdTicket", sql.Int, idTicket)
+          .input("IdImpresora", sql.Int, idImpresora).query(`
                         SELECT 
                             tl.IdLinea,
                             tl.IdArticulo,
@@ -1314,254 +1565,292 @@ app.post('/api/tickets/:idTicket/imprimir', async (req, res) => {
                         ORDER BY tl.IdLinea
                     `);
 
-                const articulos = articulosResult.recordset;
+        const articulos = articulosResult.recordset;
 
-                if (articulos.length === 0) {
-                    resultados.push({ idImpresora, success: true, mensaje: 'Sin artículos para imprimir' });
-                    continue;
-                }
-
-                // Generar comandos ESC/POS para impresora térmica 80mm
-                const ESC = '\x1B';
-                const GS = '\x1D';
-
-                // Tamaño de letra configurable desde config.json
-                // tamanoAlto y tamanoAncho: valores 1-8 (1 = normal, 2 = doble, etc.)
-                // GS ! byte: bits 0-2 = alto-1, bits 4-6 = ancho-1
-                const tamanoAlto = (config.tiquet && config.tiquet.tamanoAlto >= 1)
-                    ? Math.min(8, Math.max(1, config.tiquet.tamanoAlto))
-                    : 1;
-                const tamanoAncho = (config.tiquet && config.tiquet.tamanoAncho >= 1)
-                    ? Math.min(8, Math.max(1, config.tiquet.tamanoAncho))
-                    : 1;
-                const tamanoByte = String.fromCharCode((tamanoAlto - 1) | ((tamanoAncho - 1) << 4));
-
-                let comandos = '';
-
-                // Inicializar impresora
-                comandos += ESC + '@';
-
-                // Centrar texto
-                comandos += ESC + 'a' + '\x01';
-
-                // Negrita + tamaño grande
-                comandos += ESC + 'E' + '\x01';
-                comandos += GS + '!' + '\x11';
-                comandos += 'Cafeteria El Trigal\n';
-
-                // Volver al tamaño configurado (tamano del config)
-                comandos += GS + '!' + tamanoByte;
-                comandos += ESC + 'E' + '\x00';
-
-                // Información de mesa y fecha
-                comandos += '\n';
-                comandos += `Mesa: ${ticket.NombreMesa}\n`;
-                const fecha = new Date(ticket.Fecha);
-                // SQL Server guarda hora local sin TZ → mssql la trata como UTC, no convertir
-                const dd = String(fecha.getUTCDate()).padStart(2, '0');
-                const mm = String(fecha.getUTCMonth() + 1).padStart(2, '0');
-                const yyyy = fecha.getUTCFullYear();
-                const hh = String(fecha.getUTCHours()).padStart(2, '0');
-                const min = String(fecha.getUTCMinutes()).padStart(2, '0');
-                const ss = String(fecha.getUTCSeconds()).padStart(2, '0');
-                comandos += `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}\n`;
-                if (nombreEmpleado) {
-                    comandos += `Empleado: ${nombreEmpleado}\n`;
-                }
-                comandos += '\n';
-
-                // Línea separadora
-                comandos += '------------------------------------------------\n'; 1
-
-                // Align izquierda para artículos
-                comandos += ESC + 'a' + '\x00';
-
-                // Lista de artículos
-                articulos.forEach(art => {
-                    // Cantidad x Nombre
-                    let linea = `${art.Cantidad}x ${art.Nombre}`;
-                    if (linea.length > 48) {
-                        linea = linea.substring(0, 45) + '...';
-                    }
-                    comandos += linea + '\n';
-
-                    // Observaciones si existen
-                    if (art.Observaciones && art.Observaciones.trim()) {
-                        comandos += `  * ${art.Observaciones}\n`;
-                    }
-
-                    comandos += '\n';
-                });
-
-                // Línea separadora
-                comandos += '------------------------------------------------\n';
-
-                // Centrar para el pie
-                comandos += ESC + 'a' + '\x01';
-                comandos += '\n';
-                comandos += ` ${impresora.Nombre}\n`;
-                comandos += '\n\n\n';
-
-                // Cortar papel
-                comandos += GS + 'V' + '\x41' + '\x03';
-
-                // Enviar a la impresora por red
-                await new Promise((resolve, reject) => {
-                    const client = new net.Socket();
-                    let resolved = false;
-
-                    const timeout = setTimeout(() => {
-                        if (!resolved) {
-                            resolved = true;
-                            client.destroy();
-                            reject(new Error('Timeout al conectar con impresora'));
-                        }
-                    }, 8000);
-
-                    console.log(`🖨️  Intentando conectar a ${impresora.Nombre} → IP: ${impresora.IP}, Puerto: ${puerto}`);
-                    client.connect(puerto, impresora.IP, () => {
-                        clearTimeout(timeout);
-                        console.log(`🖨️  Conectado a ${impresora.Nombre} (${impresora.IP}:${puerto})`);
-
-                        // Escribir datos y esperar a que se complete la escritura
-                        client.write(Buffer.from(comandos, 'binary'), (err) => {
-                            if (err) {
-                                if (!resolved) {
-                                    resolved = true;
-                                    client.destroy();
-                                    reject(err);
-                                }
-                                return;
-                            }
-
-                            // Datos enviados correctamente — resolver ya
-                            if (!resolved) {
-                                resolved = true;
-                                console.log(`🖨️  Datos enviados a ${impresora.Nombre}`);
-                                resolve();
-                            }
-
-                            // Dar tiempo a la impresora y cerrar
-                            setTimeout(() => {
-                                client.end();
-                            }, 300);
-                        });
-                    });
-
-                    client.on('data', (data) => {
-                        console.log('Respuesta impresora:', data);
-                    });
-
-                    client.on('close', () => {
-                        console.log(`🖨️  Conexión cerrada con ${impresora.Nombre}`);
-                        // Resolver si no se había hecho antes (p.ej. cierre limpio)
-                        if (!resolved) {
-                            resolved = true;
-                            resolve();
-                        }
-                    });
-
-                    client.on('error', (err) => {
-                        clearTimeout(timeout);
-                        // ECONNRESET: la impresora cerró la conexión tras recibir datos → éxito
-                        if (err.code === 'ECONNRESET' && resolved) {
-                            console.log(`🖨️  ECONNRESET ignorado — datos ya enviados a ${impresora.Nombre}`);
-                            return;
-                        }
-                        if (!resolved) {
-                            resolved = true;
-                            client.destroy();
-                            reject(err);
-                        }
-                    });
-                });
-
-                resultados.push({
-                    idImpresora,
-                    success: true,
-                    nombre: impresora.Nombre,
-                    articulos: articulos.length
-                });
-
-            } catch (err) {
-                console.error(`Error al imprimir en impresora ${idImpresora}:`, err);
-                resultados.push({ idImpresora, success: false, error: err.message });
-            }
+        if (articulos.length === 0) {
+          resultados.push({
+            idImpresora,
+            success: true,
+            mensaje: "Sin artículos para imprimir",
+          });
+          continue;
         }
 
-        console.log('✅ Resultados de impresión:', resultados);
-        const todosExitosos = resultados.every(r => r.success);
+        // Generar comandos ESC/POS para impresora térmica 80mm
+        const ESC = "\x1B";
+        const GS = "\x1D";
 
-        res.json({
-            success: todosExitosos,
-            resultados
+        // Tamaño de letra configurable desde config.json
+        // tamanoAlto y tamanoAncho: valores 1-8 (1 = normal, 2 = doble, etc.)
+        // GS ! byte: bits 0-2 = alto-1, bits 4-6 = ancho-1
+        const tamanoAlto =
+          config.tiquet && config.tiquet.tamanoAlto >= 1
+            ? Math.min(8, Math.max(1, config.tiquet.tamanoAlto))
+            : 1;
+        const tamanoAncho =
+          config.tiquet && config.tiquet.tamanoAncho >= 1
+            ? Math.min(8, Math.max(1, config.tiquet.tamanoAncho))
+            : 1;
+        const tamanoByte = String.fromCharCode(
+          (tamanoAlto - 1) | ((tamanoAncho - 1) << 4),
+        );
+
+        let comandos = "";
+
+        // Inicializar impresora
+        comandos += ESC + "@";
+
+        // Centrar texto
+        comandos += ESC + "a" + "\x01";
+
+        // Negrita + tamaño grande
+        comandos += ESC + "E" + "\x01";
+        comandos += GS + "!" + "\x11";
+        comandos += "Cafeteria El Trigal\n";
+
+        // Volver al tamaño configurado (tamano del config)
+        comandos += GS + "!" + tamanoByte;
+        comandos += ESC + "E" + "\x00";
+
+        // Información de mesa y fecha
+        comandos += "\n";
+        comandos += `Mesa: ${ticket.NombreMesa}\n`;
+        const fecha = new Date(ticket.Fecha);
+        // SQL Server guarda hora local sin TZ → mssql la trata como UTC, no convertir
+        const dd = String(fecha.getUTCDate()).padStart(2, "0");
+        const mm = String(fecha.getUTCMonth() + 1).padStart(2, "0");
+        const yyyy = fecha.getUTCFullYear();
+        const hh = String(fecha.getUTCHours()).padStart(2, "0");
+        const min = String(fecha.getUTCMinutes()).padStart(2, "0");
+        const ss = String(fecha.getUTCSeconds()).padStart(2, "0");
+        comandos += `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}\n`;
+        if (nombreEmpleado) {
+          comandos += `Empleado: ${nombreEmpleado}\n`;
+        }
+        comandos += "\n";
+
+        // Línea separadora
+        comandos += "------------------------------------------------\n";
+        1;
+
+        // Align izquierda para artículos
+        comandos += ESC + "a" + "\x00";
+
+        // Lista de artículos
+        articulos.forEach((art) => {
+          const esTachada = lineasTachadas.includes(art.IdLinea);
+          if (esTachada) return; // Se omite totalmente de la impresión
+
+          // Cantidad x Nombre
+          let linea = `${art.Cantidad}x ${art.Nombre}`;
+          if (linea.length > 48) {
+            linea = linea.substring(0, 45) + "...";
+          }
+          comandos += linea + "\n";
+
+          // Observaciones si existen
+          if (art.Observaciones && art.Observaciones.trim()) {
+            const obsLimpia = art.Observaciones.replace(
+              /\s*\[NP\]/g,
+              "",
+            ).trim();
+            if (obsLimpia) {
+              comandos += `  * ${obsLimpia}\n`;
+            }
+          }
+
+          comandos += "\n";
         });
 
-    } catch (err) {
-        console.error('❌ Error general al imprimir:', err);
-        res.status(500).json({ error: 'Error al imprimir', details: err.message });
+        // Línea separadora
+        comandos += "------------------------------------------------\n";
+
+        // Centrar para el pie
+        comandos += ESC + "a" + "\x01";
+        comandos += "\n";
+        comandos += ` ${impresora.Nombre}\n`;
+        comandos += "\n\n\n";
+
+        // Cortar papel
+        comandos += GS + "V" + "\x41" + "\x03";
+
+        // Enviar a la impresora por red
+        await new Promise((resolve, reject) => {
+          const client = new net.Socket();
+          let resolved = false;
+
+          const timeout = setTimeout(() => {
+            if (!resolved) {
+              resolved = true;
+              client.destroy();
+              reject(new Error("Timeout al conectar con impresora"));
+            }
+          }, 8000);
+
+          console.log(
+            `🖨️  Intentando conectar a ${impresora.Nombre} → IP: ${impresora.IP}, Puerto: ${puerto}`,
+          );
+          client.connect(puerto, impresora.IP, () => {
+            clearTimeout(timeout);
+            console.log(
+              `🖨️  Conectado a ${impresora.Nombre} (${impresora.IP}:${puerto})`,
+            );
+
+            // Escribir datos y esperar a que se complete la escritura
+            client.write(Buffer.from(comandos, "binary"), (err) => {
+              if (err) {
+                if (!resolved) {
+                  resolved = true;
+                  client.destroy();
+                  reject(err);
+                }
+                return;
+              }
+
+              // Datos enviados correctamente — resolver ya
+              if (!resolved) {
+                resolved = true;
+                console.log(`🖨️  Datos enviados a ${impresora.Nombre}`);
+                resolve();
+              }
+
+              // Dar tiempo a la impresora y cerrar
+              setTimeout(() => {
+                client.end();
+              }, 300);
+            });
+          });
+
+          client.on("data", (data) => {
+            console.log("Respuesta impresora:", data);
+          });
+
+          client.on("close", () => {
+            console.log(`🖨️  Conexión cerrada con ${impresora.Nombre}`);
+            // Resolver si no se había hecho antes (p.ej. cierre limpio)
+            if (!resolved) {
+              resolved = true;
+              resolve();
+            }
+          });
+
+          client.on("error", (err) => {
+            clearTimeout(timeout);
+            // ECONNRESET: la impresora cerró la conexión tras recibir datos → éxito
+            if (err.code === "ECONNRESET" && resolved) {
+              console.log(
+                `🖨️  ECONNRESET ignorado — datos ya enviados a ${impresora.Nombre}`,
+              );
+              return;
+            }
+            if (!resolved) {
+              resolved = true;
+              client.destroy();
+              reject(err);
+            }
+          });
+        });
+
+        resultados.push({
+          idImpresora,
+          success: true,
+          nombre: impresora.Nombre,
+          articulos: articulos.length,
+        });
+      } catch (err) {
+        console.error(`Error al imprimir en impresora ${idImpresora}:`, err);
+        resultados.push({ idImpresora, success: false, error: err.message });
+      }
     }
+
+    console.log("✅ Resultados de impresión:", resultados);
+    const todosExitosos = resultados.every((r) => r.success);
+
+    res.json({
+      success: todosExitosos,
+      resultados,
+    });
+  } catch (err) {
+    console.error("❌ Error general al imprimir:", err);
+    res.status(500).json({ error: "Error al imprimir", details: err.message });
+  }
 });
 
 // =============================================
 // SERVIR APLICACIÓN
 // =============================================
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
 // =============================================
 // INICIAR SERVIDOR HTTPS/HTTP + WEBSOCKET
 // =============================================
 
-const HOST = '0.0.0.0';
+const HOST = "0.0.0.0";
 
 let server;
-const sslKeyPath = path.join(__dirname, 'ssl', 'server.key');
-const sslCertPath = path.join(__dirname, 'ssl', 'server.cert');
-const sslPfxPath = path.join(__dirname, 'ssl', 'server.pfx');
+const sslKeyPath = path.join(__dirname, "ssl", "server.key");
+const sslCertPath = path.join(__dirname, "ssl", "server.cert");
+const sslPfxPath = path.join(__dirname, "ssl", "server.pfx");
 
 if (fs.existsSync(sslPfxPath)) {
-    const httpsOptions = {
-        pfx: fs.readFileSync(sslPfxPath),
-        passphrase: 'desarrollo'
-    };
+  const httpsOptions = {
+    pfx: fs.readFileSync(sslPfxPath),
+    passphrase: "desarrollo",
+  };
 
-    server = https.createServer(httpsOptions, app);
-    server.listen(port, HOST, () => {
-        console.log(`🔐 Servidor HTTPS corriendo en https://localhost:${port}`);
-        console.log(`⚠️  Certificado autofirmado - el navegador mostrará advertencia de seguridad`);
+  server = https.createServer(httpsOptions, app);
+  server.listen(port, HOST, () => {
+    console.log(`🔐 Servidor HTTPS corriendo en https://localhost:${port}`);
+    console.log(
+      `⚠️  Certificado autofirmado - el navegador mostrará advertencia de seguridad`,
+    );
 
-        getConnection()
-            .then(() => console.log('✅ Conexión a la base de datos establecida correctamente'))
-            .catch(err => console.error('❌ Error al conectar con la base de datos:', err));
-    });
+    getConnection()
+      .then(() =>
+        console.log("✅ Conexión a la base de datos establecida correctamente"),
+      )
+      .catch((err) =>
+        console.error("❌ Error al conectar con la base de datos:", err),
+      );
+  });
 } else if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
-    const httpsOptions = {
-        key: fs.readFileSync(sslKeyPath),
-        cert: fs.readFileSync(sslCertPath)
-    };
+  const httpsOptions = {
+    key: fs.readFileSync(sslKeyPath),
+    cert: fs.readFileSync(sslCertPath),
+  };
 
-    server = https.createServer(httpsOptions, app);
-    server.listen(port, HOST, () => {
-        console.log(`🔐 Servidor HTTPS corriendo en https://localhost:${port}`);
-        console.log(`⚠️  Certificado autofirmado - el navegador mostrará advertencia de seguridad`);
+  server = https.createServer(httpsOptions, app);
+  server.listen(port, HOST, () => {
+    console.log(`🔐 Servidor HTTPS corriendo en https://localhost:${port}`);
+    console.log(
+      `⚠️  Certificado autofirmado - el navegador mostrará advertencia de seguridad`,
+    );
 
-        getConnection()
-            .then(() => console.log('✅ Conexión a la base de datos establecida correctamente'))
-            .catch(err => console.error('❌ Error al conectar con la base de datos:', err));
-    });
+    getConnection()
+      .then(() =>
+        console.log("✅ Conexión a la base de datos establecida correctamente"),
+      )
+      .catch((err) =>
+        console.error("❌ Error al conectar con la base de datos:", err),
+      );
+  });
 } else {
-    server = http.createServer(app);
-    server.listen(port, HOST, () => {
-        console.log(`🚀 Servidor HTTP corriendo en http://localhost:${port}`);
-        console.log(`💡 Para usar HTTPS, ejecuta: .\\generate-ssl.ps1`);
+  server = http.createServer(app);
+  server.listen(port, HOST, () => {
+    console.log(`🚀 Servidor HTTP corriendo en http://localhost:${port}`);
+    console.log(`💡 Para usar HTTPS, ejecuta: .\\generate-ssl.ps1`);
 
-        getConnection()
-            .then(() => console.log('✅ Conexión a la base de datos establecida correctamente'))
-            .catch(err => console.error('❌ Error al conectar con la base de datos:', err));
-    });
+    getConnection()
+      .then(() =>
+        console.log("✅ Conexión a la base de datos establecida correctamente"),
+      )
+      .catch((err) =>
+        console.error("❌ Error al conectar con la base de datos:", err),
+      );
+  });
 }
 
 // Iniciar WebSocket Server
@@ -1569,29 +1858,63 @@ const wss = new WebSocket.Server({ server });
 
 let clientes = [];
 
-wss.on('connection', (ws) => {
-    console.log('🔌 Cliente WebSocket conectado');
-    clientes.push(ws);
+wss.on("connection", (ws) => {
+  console.log("🔌 Cliente WebSocket conectado");
+  ws.isAlive = true;
+  clientes.push(ws);
 
-    ws.on('close', () => {
-        console.log('🔌 Cliente WebSocket desconectado');
-        clientes = clientes.filter(c => c !== ws);
-    });
+  // Responder a pings del cliente con pong
+  ws.on("message", (msg) => {
+    try {
+      const data = JSON.parse(msg);
+      if (data.tipo === "ping") {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ tipo: "pong" }));
+        }
+      }
+    } catch (_) {
+      /* ignorar mensajes no-JSON */
+    }
+  });
 
-    ws.on('error', (error) => {
-        console.error('❌ Error WebSocket:', error);
-    });
+  ws.on("pong", () => {
+    ws.isAlive = true;
+  });
+
+  ws.on("close", () => {
+    console.log("🔌 Cliente WebSocket desconectado");
+    clientes = clientes.filter((c) => c !== ws);
+  });
+
+  ws.on("error", (error) => {
+    console.error("❌ Error WebSocket:", error);
+  });
 });
+
+// Ping nativo cada 45s para detectar clientes zombi (móviles que se durmieron)
+const wsPingInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      console.log("🧹 Cerrando conexión WS zombi");
+      clientes = clientes.filter((c) => c !== ws);
+      return ws.terminate();
+    }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 45000);
+
+wss.on("close", () => clearInterval(wsPingInterval));
 
 // Función para notificar a todos los clientes
 function notificarClientes(tipo, datos = {}) {
-    const mensaje = JSON.stringify({ tipo, ...datos });
-    console.log(`📢 Notificando a ${clientes.length} clientes:`, mensaje);
-    clientes.forEach(cliente => {
-        if (cliente.readyState === WebSocket.OPEN) {
-            cliente.send(mensaje);
-        }
-    });
+  const mensaje = JSON.stringify({ tipo, ...datos });
+  console.log(`📢 Notificando a ${clientes.length} clientes:`, mensaje);
+  clientes.forEach((cliente) => {
+    if (cliente.readyState === WebSocket.OPEN) {
+      cliente.send(mensaje);
+    }
+  });
 }
 
-console.log('✅ WebSocket Server iniciado');
+console.log("✅ WebSocket Server iniciado");

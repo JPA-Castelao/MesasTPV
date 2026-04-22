@@ -423,6 +423,11 @@ async function validarPin() {
 
       ocultarLogin();
 
+      actualizarVistaSegunUsuario();
+
+      toggleFullScreen();
+      actualizarEmpleadoActual();
+
       // Activar pantalla completa
       toggleFullScreen();
 
@@ -495,6 +500,26 @@ function configurarLoginEventos() {
       volverASeleccion();
     }
   });
+}
+
+function aplicarPreferenciaVista() {
+  const btnToggle = document.getElementById("btn-cambio-vista");
+  const toggleIcon = document.getElementById("icono-vista");
+
+  const sesion = sessionStorage.getItem("empleado");
+  if (!sesion) return;
+
+  const empleado = JSON.parse(sesion);
+  const userViewKey = `productViewMode_${empleado.IdEmpleado}`;
+  const savedView = localStorage.getItem(userViewKey);
+
+  if (savedView === "text") {
+    document.body.classList.add("hide-product-images");
+    if (toggleIcon) toggleIcon.src = "img/iconoImagenes.png";
+  } else {
+    document.body.classList.remove("hide-product-images");
+    if (toggleIcon) toggleIcon.src = "img/iconoTexto.png";
+  }
 }
 
 // =============================================
@@ -798,143 +823,112 @@ function cerrarModalTicket() {
 // =============================================
 // BOTON CAMBIAR/VISTA
 // =============================================
-document.addEventListener("DOMContentLoaded", () => {
-  // Usamos el ID exacto de tu HTML
+
+// document.addEventListener("DOMContentLoaded", () => {
+//   const btnToggle = document.getElementById("btn-cambio-vista");
+//   const toggleIcon = document.getElementById("icono-vista");
+
+//   if (btnToggle && toggleIcon) {
+//     const iconTexto = "img/iconoTexto.png";
+//     const iconImagen = "img/iconoImagenes.png";
+
+//     // --- FUNCIÓN PARA OBTENER LA LLAVE DEL USUARIO ACTUAL ---
+//     const getProductViewKey = () => {
+//       const sesion = sessionStorage.getItem("empleado");
+//       if (sesion) {
+//         const empleado = JSON.parse(sesion);
+//         // Usamos IdEmpleado que es el que viene de tu validarPin()
+//         return `productViewMode_${empleado.IdEmpleado}`;
+//       }
+//       return "productViewMode_default";
+//     };
+
+//     // 1. CARGAR PREFERENCIA INICIAL
+//     const userViewKey = getProductViewKey();
+//     const savedView = localStorage.getItem(userViewKey);
+//     let isListView = savedView === "text";
+
+//     // Aplicar vista según lo guardado para este ID
+//     if (isListView) {
+//       toggleIcon.src = iconImagen;
+//       document.body.classList.add("hide-product-images");
+//     } else {
+//       toggleIcon.src = iconTexto;
+//       document.body.classList.remove("hide-product-images");
+//     }
+
+//     // 2. EVENTO CLICK
+//     btnToggle.addEventListener("click", () => {
+//       isListView = !isListView;
+
+//       // Volvemos a calcular la llave por si acaso el empleado cambió sin recargar
+//       const currentKey = getProductViewKey();
+
+//       if (isListView) {
+//         toggleIcon.src = iconImagen;
+//         document.body.classList.add("hide-product-images");
+//         localStorage.setItem(currentKey, "text");
+//       } else {
+//         toggleIcon.src = iconTexto;
+//         document.body.classList.remove("hide-product-images");
+//         localStorage.setItem(currentKey, "grid");
+//       }
+//     });
+//   }
+// });
+
+// Esta función es la que "manda" sobre la interfaz
+function actualizarVistaSegunUsuario() {
+  const sesion = sessionStorage.getItem("empleado");
   const btnToggle = document.getElementById("btn-cambio-vista");
   const toggleIcon = document.getElementById("icono-vista");
 
-  if (btnToggle && toggleIcon) {
-    // Rutas de tus imágenes (ajusta si las carpetas son distintas)
-    const iconTexto = "img/iconoTexto.png"; // El de las rayitas
-    const iconImagen = "img/iconoImagenes.png"; // El de la montañita
+  if (sesion) {
+    const empleado = JSON.parse(sesion);
+    const userViewKey = `productViewMode_${empleado.IdEmpleado}`;
+    const savedView = localStorage.getItem(userViewKey);
 
-    let isListView = false;
+    if (savedView === "text") {
+      document.body.classList.add("hide-product-images");
+      if (toggleIcon) toggleIcon.src = "img/iconoImagenes.png";
+    } else {
+      document.body.classList.remove("hide-product-images");
+      if (toggleIcon) toggleIcon.src = "img/iconoTexto.png";
+    }
+  } else {
+    // Si no hay nadie, por defecto mostramos imágenes y limpiamos el body
+    document.body.classList.remove("hide-product-images");
+  }
+}
 
+document.addEventListener("DOMContentLoaded", () => {
+  const btnToggle = document.getElementById("btn-cambio-vista");
+
+  if (btnToggle) {
     btnToggle.addEventListener("click", () => {
-      isListView = !isListView;
+      const sesion = sessionStorage.getItem("empleado");
+      if (!sesion) return;
 
-      if (isListView) {
-        toggleIcon.src = iconImagen; // Mostramos icono de imagen para volver
-        document.body.classList.add("hide-product-images");
-        console.log("Modo texto activado");
-      } else {
-        toggleIcon.src = iconTexto; // Mostramos icono de texto para cambiar
-        document.body.classList.remove("hide-product-images");
-        console.log("Modo imágenes activado");
+      const empleado = JSON.parse(sesion);
+      const userViewKey = `productViewMode_${empleado.IdEmpleado}`;
+
+      // Toggle de la clase y guardado
+      const isNowList = document.body.classList.toggle("hide-product-images");
+      localStorage.setItem(userViewKey, isNowList ? "text" : "grid");
+
+      // Actualizar icono
+      const toggleIcon = document.getElementById("icono-vista");
+      if (toggleIcon) {
+        toggleIcon.src = isNowList
+          ? "img/iconoImagenes.png"
+          : "img/iconoTexto.png";
       }
     });
   }
+
+  // Ejecutar al cargar la página por primera vez
+  actualizarVistaSegunUsuario();
 });
-
-// =============================================
-// FAVORITOS
-// =============================================
-
-let productosFavoritos = [];
-let mostrandoFavoritos = false;
-
-async function cargarProductosFavoritos() {
-  try {
-    console.log("⭐ Cargando productos favoritos...");
-    const response = await fetch(
-      `${API_BASE}/favoritos?idLista=${idListaActual}`,
-    );
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log("⭐ Favoritos recibidos de API:", data.length, data);
-
-    productosFavoritos = data.map((item) => ({
-      id: item.iDaRTICULO || item.IdArticulo,
-      nombre: item.DESCRIP,
-      precio: parseFloat(item.PRECIO) || 0,
-      categoria: item.DESCRIPFAMILIA,
-    }));
-
-    console.log(
-      "⭐ Favoritos procesados:",
-      productosFavoritos.length,
-      productosFavoritos,
-    );
-  } catch (error) {
-    console.error("❌ Error al cargar productos favoritos:", error);
-    productosFavoritos = [];
-  }
-}
-
-function configurarBotonFavoritos() {
-  console.log("🔧 Configurando botón de favoritos...");
-  const btnFavoritos = document.getElementById("btn-favoritos");
-  console.log("🔧 Botón encontrado:", btnFavoritos);
-
-  if (!btnFavoritos) {
-    console.error("❌ No se encontró el botón btn-favoritos");
-    return;
-  }
-
-  btnFavoritos.addEventListener("click", () => {
-    console.log("⭐ Click en botón favoritos!");
-    toggleFavoritos();
-  });
-
-  console.log("✅ Event listener agregado al botón favoritos");
-}
-
-function toggleFavoritos() {
-  console.log("⭐ toggleFavoritos llamado. Estado actual:", mostrandoFavoritos);
-  const btnFavoritos = document.getElementById("btn-favoritos");
-  mostrandoFavoritos = !mostrandoFavoritos;
-
-  console.log("⭐ Nuevo estado:", mostrandoFavoritos);
-  console.log("⭐ Favoritos disponibles:", productosFavoritos.length);
-
-  if (mostrandoFavoritos) {
-    btnFavoritos.classList.add("active");
-    mostrarProductosFavoritos();
-  } else {
-    btnFavoritos.classList.remove("active");
-    mostrarProductos(); // Mostrar todos los productos
-  }
-}
-
-function mostrarProductosFavoritos() {
-  console.log("⭐ mostrarProductosFavoritos llamado");
-  console.log("⭐ productosFavoritos:", productosFavoritos);
-  console.log("⭐ productosDisponibles element:", productosDisponibles);
-  console.log(
-    "⭐ Mostrando productos favoritos. Total:",
-    productosFavoritos.length,
-  );
-  productosDisponibles.innerHTML = "";
-
-  if (productosFavoritos.length === 0) {
-    productosDisponibles.innerHTML = `
-            <div style="padding: 2rem; text-align: center; color: #999;">
-                <p style="font-size: 2rem; margin-bottom: 0.5rem;">⭐</p>
-                <p>No hay productos favoritos configurados</p>
-            </div>
-        `;
-    return;
-  }
-
-  // Mostrar favoritos sin agrupar por categoría
-  productosFavoritos.forEach((producto) => {
-    const productoElement = document.createElement("div");
-    productoElement.className = "producto producto-favorito";
-    productoElement.innerHTML = `
-            <span class="producto-star">⭐</span>
-            <div class="producto-nombre">${producto.nombre}</div>
-            <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
-        `;
-    productoElement.addEventListener("click", () => agregarProducto(producto));
-    productosDisponibles.appendChild(productoElement);
-  });
-
-  console.log("✅ Productos favoritos renderizados");
-}
 
 // =============================================
 // FUNCIONES DE ORDEN (DRAG & DROP)
@@ -1570,100 +1564,6 @@ async function abrirMesa(idCliente, opciones = {}) {
 // =============================================
 // PRODUCTOS
 // =============================================
-
-// function mostrarProductos(terminoBusqueda = "") {
-//   productosDisponibles.innerHTML = "";
-
-//   // Filtrar productos si hay un término de búsqueda
-//   let productosFiltrados = productos;
-//   if (terminoBusqueda.trim()) {
-//     const termino = terminoBusqueda.toLowerCase();
-//     productosFiltrados = productos
-//       .filter((p) => p.nombre.toLowerCase().includes(termino))
-//       .sort((a, b) => {
-//         const ordenA = a.orden != null ? a.orden : 9999;
-//         const ordenB = b.orden != null ? b.orden : 9999;
-//         if (ordenA !== ordenB) return ordenA - ordenB;
-//         return a.nombre.localeCompare(b.nombre);
-//       });
-//   }
-
-//   // Si hay búsqueda activa, mostrar todos los productos sin agrupar por categoría
-//   if (terminoBusqueda.trim()) {
-//     if (productosFiltrados.length === 0) {
-//       productosDisponibles.innerHTML = `
-//                 <div style="padding: 2rem; text-align: center; color: #999;">
-//                     No se encontraron productos
-//                 </div>
-//             `;
-//       return;
-//     }
-
-//     productosFiltrados.forEach((producto) => {
-//       const productoElement = document.createElement("div");
-//       productoElement.className = "producto";
-//       productoElement.innerHTML = `
-//                 <div class="producto-nombre">${producto.nombre}</div>
-//                 <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
-//             `;
-//       productoElement.addEventListener("click", () =>
-//         agregarProducto(producto),
-//       );
-//       productosDisponibles.appendChild(productoElement);
-//     });
-//     return;
-//   }
-
-//   // Vista normal por categorías
-//   const categorias = [
-//     ...new Set(productosFiltrados.map((p) => p.categoria)),
-//   ].filter((c) => c);
-
-//   categorias.forEach((categoria) => {
-//     const categoriaElement = document.createElement("div");
-//     categoriaElement.className = "categoria-productos";
-
-//     const categoriaHeader = document.createElement("div");
-//     categoriaHeader.className = "categoria-header";
-//     categoriaHeader.innerHTML = `
-//             <h4>${categoria}</h4>
-//             <span class="toggle-icon">▶</span>
-//         `;
-
-//     const productosContainer = document.createElement("div");
-//     productosContainer.className = "productos-categoria-container collapsed";
-
-//     const productosCategoria = productosFiltrados.filter(
-//       (p) => p.categoria === categoria,
-//     );
-//     productosCategoria.forEach((producto) => {
-//       const productoElement = document.createElement("div");
-//       productoElement.className = "producto";
-//       productoElement.innerHTML = `
-//                 <div class="producto-nombre">${producto.nombre}</div>
-//                 <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
-//             `;
-//       productoElement.addEventListener("click", () =>
-//         agregarProducto(producto),
-//       );
-//       productosContainer.appendChild(productoElement);
-//     });
-
-//     categoriaHeader.addEventListener("click", () => {
-//       productosContainer.classList.toggle("collapsed");
-//       const toggleIcon = categoriaHeader.querySelector(".toggle-icon");
-//       toggleIcon.textContent = productosContainer.classList.contains(
-//         "collapsed",
-//       )
-//         ? "▶"
-//         : "▼";
-//     });
-
-//     categoriaElement.appendChild(categoriaHeader);
-//     categoriaElement.appendChild(productosContainer);
-//     productosDisponibles.appendChild(categoriaElement);
-//   });
-// }
 
 function mostrarProductos(terminoBusqueda = "") {
   productosDisponibles.innerHTML = "";

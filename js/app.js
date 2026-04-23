@@ -820,62 +820,119 @@ function cerrarModalTicket() {
   // NO limpiar: las exclusiones persisten en localStorage hasta que se borre el ticket
 }
 
+//===============================================
+//FAVORITOS
+//===============================================
+
+let productosFavoritos = [];
+let mostrandoFavoritos = false;
+
+async function cargarProductosFavoritos() {
+  try {
+    console.log("⭐ Cargando productos favoritos...");
+    const response = await fetch(
+      `${API_BASE}/favoritos?idLista=${idListaActual}`,
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log("⭐ Favoritos recibidos de API:", data.length, data);
+
+    productosFavoritos = data.map((item) => ({
+      id: item.iDaRTICULO || item.IdArticulo,
+      nombre: item.DESCRIP,
+      precio: parseFloat(item.PRECIO) || 0,
+      categoria: item.DESCRIPFAMILIA,
+    }));
+
+    console.log(
+      "⭐ Favoritos procesados:",
+      productosFavoritos.length,
+      productosFavoritos,
+    );
+  } catch (error) {
+    console.error("❌ Error al cargar productos favoritos:", error);
+    productosFavoritos = [];
+  }
+}
+
+function configurarBotonFavoritos() {
+  console.log("🔧 Configurando botón de favoritos...");
+  const btnFavoritos = document.getElementById("btn-favoritos");
+  console.log("🔧 Botón encontrado:", btnFavoritos);
+
+  if (!btnFavoritos) {
+    console.error("❌ No se encontró el botón btn-favoritos");
+    return;
+  }
+
+  btnFavoritos.addEventListener("click", () => {
+    console.log("⭐ Click en botón favoritos!");
+    toggleFavoritos();
+  });
+
+  console.log("✅ Event listener agregado al botón favoritos");
+}
+
+function toggleFavoritos() {
+  console.log("⭐ toggleFavoritos llamado. Estado actual:", mostrandoFavoritos);
+  const btnFavoritos = document.getElementById("btn-favoritos");
+  mostrandoFavoritos = !mostrandoFavoritos;
+
+  console.log("⭐ Nuevo estado:", mostrandoFavoritos);
+  console.log("⭐ Favoritos disponibles:", productosFavoritos.length);
+
+  if (mostrandoFavoritos) {
+    btnFavoritos.classList.add("active");
+    mostrarProductosFavoritos();
+  } else {
+    btnFavoritos.classList.remove("active");
+    mostrarProductos(); // Mostrar todos los productos
+  }
+}
+
+function mostrarProductosFavoritos() {
+  console.log("⭐ mostrarProductosFavoritos llamado");
+  console.log("⭐ productosFavoritos:", productosFavoritos);
+  console.log("⭐ productosDisponibles element:", productosDisponibles);
+  console.log(
+    "⭐ Mostrando productos favoritos. Total:",
+    productosFavoritos.length,
+  );
+  productosDisponibles.innerHTML = "";
+
+  if (productosFavoritos.length === 0) {
+    productosDisponibles.innerHTML = `
+            <div style="padding: 2rem; text-align: center; color: #999;">
+                <p style="font-size: 2rem; margin-bottom: 0.5rem;">⭐</p>
+                <p>No hay productos favoritos configurados</p>
+            </div>
+        `;
+    return;
+  }
+
+  // Mostrar favoritos sin agrupar por categoría
+  productosFavoritos.forEach((producto) => {
+    const productoElement = document.createElement("div");
+    productoElement.className = "producto producto-favorito";
+    productoElement.innerHTML = `
+            <span class="producto-star">⭐</span>
+            <div class="producto-nombre">${producto.nombre}</div>
+            <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
+        `;
+    productoElement.addEventListener("click", () => agregarProducto(producto));
+    productosDisponibles.appendChild(productoElement);
+  });
+
+  console.log("✅ Productos favoritos renderizados");
+}
+
 // =============================================
 // BOTON CAMBIAR/VISTA
 // =============================================
-
-// document.addEventListener("DOMContentLoaded", () => {
-//   const btnToggle = document.getElementById("btn-cambio-vista");
-//   const toggleIcon = document.getElementById("icono-vista");
-
-//   if (btnToggle && toggleIcon) {
-//     const iconTexto = "img/iconoTexto.png";
-//     const iconImagen = "img/iconoImagenes.png";
-
-//     // --- FUNCIÓN PARA OBTENER LA LLAVE DEL USUARIO ACTUAL ---
-//     const getProductViewKey = () => {
-//       const sesion = sessionStorage.getItem("empleado");
-//       if (sesion) {
-//         const empleado = JSON.parse(sesion);
-//         // Usamos IdEmpleado que es el que viene de tu validarPin()
-//         return `productViewMode_${empleado.IdEmpleado}`;
-//       }
-//       return "productViewMode_default";
-//     };
-
-//     // 1. CARGAR PREFERENCIA INICIAL
-//     const userViewKey = getProductViewKey();
-//     const savedView = localStorage.getItem(userViewKey);
-//     let isListView = savedView === "text";
-
-//     // Aplicar vista según lo guardado para este ID
-//     if (isListView) {
-//       toggleIcon.src = iconImagen;
-//       document.body.classList.add("hide-product-images");
-//     } else {
-//       toggleIcon.src = iconTexto;
-//       document.body.classList.remove("hide-product-images");
-//     }
-
-//     // 2. EVENTO CLICK
-//     btnToggle.addEventListener("click", () => {
-//       isListView = !isListView;
-
-//       // Volvemos a calcular la llave por si acaso el empleado cambió sin recargar
-//       const currentKey = getProductViewKey();
-
-//       if (isListView) {
-//         toggleIcon.src = iconImagen;
-//         document.body.classList.add("hide-product-images");
-//         localStorage.setItem(currentKey, "text");
-//       } else {
-//         toggleIcon.src = iconTexto;
-//         document.body.classList.remove("hide-product-images");
-//         localStorage.setItem(currentKey, "grid");
-//       }
-//     });
-//   }
-// });
 
 // Esta función es la que "manda" sobre la interfaz
 function actualizarVistaSegunUsuario() {
@@ -1082,6 +1139,7 @@ async function cargarProductos(idLista = 1) {
       precio: parseFloat(item.PRECIO) || 0,
       categoria: item.DESCRIPFAMILIA,
       orden: item.orden != null ? item.orden : 9999,
+      NombreFichero: item.NombreFichero,
     }));
 
     // Guardar en caché
@@ -1582,6 +1640,22 @@ function mostrarProductos(terminoBusqueda = "") {
       });
   }
 
+  // 1️⃣ NUEVO: Configura aquí la ruta de la carpeta donde tu servidor expone las imágenes
+  const RUTA_IMAGENES = "/imagenes-articulos/"; // La ruta puente que creamos en Node
+  const IMAGEN_DEFECTO = "img/default-user.png"; // Tu imagen local de proyecto
+
+  // 2️⃣ La función generadora
+  const generarHtmlImagen = (producto) => {
+    // Si la base de datos nos dio el nombre del archivo, usamos la ruta de AHORA.
+    // Si vino nulo o vacío, usamos la tuya por defecto.
+    const urlImagen = producto.NombreFichero
+      ? `${RUTA_IMAGENES}${producto.NombreFichero}`
+      : IMAGEN_DEFECTO;
+
+    // Usamos onerror por si la base de datos dice que se llama "cafe.jpg"
+    // pero físicamente alguien la borró de C:\Program Files\...
+    return `<img src="${urlImagen}" alt="Imagen de ${producto.nombre}" class="producto-foto" onerror="this.src='${IMAGEN_DEFECTO}'">`;
+  };
   // Si hay búsqueda activa, mostrar todos los productos sin agrupar por categoría
   if (terminoBusqueda.trim()) {
     if (productosFiltrados.length === 0) {
@@ -1593,16 +1667,16 @@ function mostrarProductos(terminoBusqueda = "") {
       return;
     }
 
-    // NUEVO: Creamos un contenedor con la clase "productos-grid" para las búsquedas
     const gridBusqueda = document.createElement("div");
     gridBusqueda.className = "productos-grid";
 
     productosFiltrados.forEach((producto) => {
       const productoElement = document.createElement("div");
       productoElement.className = "producto";
-      // NUEVO: Estructura de tarjeta con imagen
+
+      // 3️⃣ NUEVO: Inyectamos la imagen generada dinámicamente
       productoElement.innerHTML = `
-        <img src="img/default-user.png" alt="Imagen de ${producto.nombre}" class="producto-foto">
+        ${generarHtmlImagen(producto)}
         <div class="producto-info">
             <div class="producto-nombre">${producto.nombre}</div>
             <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
@@ -1635,19 +1709,20 @@ function mostrarProductos(terminoBusqueda = "") {
     `;
 
     const productosContainer = document.createElement("div");
-    // NUEVO: Añadida la clase "productos-grid" junto a las que ya tenías
     productosContainer.className =
       "productos-categoria-container productos-grid collapsed";
 
     const productosCategoria = productosFiltrados.filter(
       (p) => p.categoria === categoria,
     );
+
     productosCategoria.forEach((producto) => {
       const productoElement = document.createElement("div");
       productoElement.className = "producto";
-      // NUEVO: Estructura de tarjeta con imagen
+
+      // 4️⃣ NUEVO: Inyectamos la imagen generada dinámicamente también aquí
       productoElement.innerHTML = `
-        <img src="img/default-user.png" alt="Imagen de ${producto.nombre}" class="producto-foto">
+        ${generarHtmlImagen(producto)}
         <div class="producto-info">
             <div class="producto-nombre">${producto.nombre}</div>
             <div class="producto-precio">${producto.precio.toFixed(2)}€</div>
@@ -1674,7 +1749,6 @@ function mostrarProductos(terminoBusqueda = "") {
     productosDisponibles.appendChild(categoriaElement);
   });
 }
-
 // =============================================
 // GESTIÓN DE PEDIDO
 // =============================================

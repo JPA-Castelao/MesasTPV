@@ -1,5 +1,5 @@
 const debug = false;
-
+const path = require("path");
 // Silenciar logs si debug es false
 if (!debug) {
   console.log = function () {};
@@ -8,15 +8,23 @@ if (!debug) {
 const express = require("express");
 const sql = require("mssql");
 const cors = require("cors");
-const path = require("path");
 const fs = require("fs");
 const https = require("https");
+
 const http = require("http");
 const WebSocket = require("ws");
 const compression = require("compression");
 
 const app = express();
 const mesasEnUso = new Map();
+const rutaImagenes = path.join(
+  "C:",
+  "Program Files",
+  "AHORA",
+  "DOCUMENTOS",
+  "IMAGENES",
+);
+app.use("/imagenes-articulos", express.static(rutaImagenes));
 
 // Cargar configuración desde archivo JSON
 let config;
@@ -1111,12 +1119,11 @@ app.post("/api/mesas/:idCliente/cerrar", async (req, res) => {
 // =============================================
 // RUTAS API - ARTÍCULOS
 // =============================================
-
+//esta es la buenaaaaaaaaaaaaaaaaaaaaaaaaaa
 app.get("/api/articulos", async (req, res) => {
   try {
     const pool = await getConnection();
     const idLista = parseInt(req.query.idLista) || 1;
-    console.log("Obteniendo artículos con IdLista:", idLista);
 
     const result = await pool.request().input("IdLista", sql.Int, idLista)
       .query(`
@@ -1125,15 +1132,18 @@ app.get("/api/articulos", async (req, res) => {
                 art.DESCRIP,
                 a.DESCRIPFAMILIA,
                 P.PRECIO,
-                a.orden
+                a.orden,
+                I.NombreFichero -- 👈 Agregamos el nombre de la imagen
             FROM pers_OrdenArticulosTPV a
             LEFT JOIN Articulos art ON a.iDaRTICULO = art.IdArticulo
             LEFT JOIN VListas_Precios p ON a.iDaRTICULO = p.idarticulo AND p.IdLista = @IdLista
+            -- 👈 Unimos la tabla de imágenes usando la lógica de tu consulta
+            LEFT JOIN Objetos_Imagenes I ON I.Objeto = 'Articulo'
+                 AND I.Descrip LIKE '%(' + CAST(a.iDaRTICULO AS VARCHAR(50)) + ')%'
             WHERE a.IDCAJA = ${TPV_CONFIG.IdCaja} AND (art.estado IS NULL OR art.estado = 0)
             ORDER BY a.DESCRIPFAMILIA, a.orden, art.DESCRIP
         `);
 
-    console.log("Artículos obtenidos:", result.recordset.length);
     res.json(result.recordset);
   } catch (err) {
     console.error("Error al obtener artículos:", err);
@@ -1142,6 +1152,46 @@ app.get("/api/articulos", async (req, res) => {
       .json({ error: "Error al obtener artículos", details: err.message });
   }
 });
+
+//PRUEBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+// async function cargarProductos(idLista = 1) {
+//   try {
+//     const cacheKey = `productos_cache_lista_${idLista}`;
+
+//     // 🛑 COMENTAMOS ESTO TEMPORALMENTE PARA FORZAR LA DESCARGA
+//     // const cached = localStorage.getItem(cacheKey);
+//     // const cacheTime = localStorage.getItem(cacheKey + "_time");
+//     // if (cached && cacheTime && Date.now() - parseInt(cacheTime) < cacheTTL) { ... }
+
+//     console.log(
+//       `⬇️ Descargando productos desde servidor (lista ${idLista})...`,
+//     );
+//     const response = await fetch(`${API_BASE}/articulos?idLista=${idLista}`);
+//     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+//     const data = await response.json();
+
+//     // 🕵️ Novedad: Imprimimos el primer producto que llega del servidor
+//     console.log("🔍 DATOS PUROS DEL SERVIDOR:", data[0]);
+
+//     productos = data.map((item) => ({
+//       id: item.iDaRTICULO,
+//       nombre: item.DESCRIP,
+//       precio: parseFloat(item.PRECIO) || 0,
+//       categoria: item.DESCRIPFAMILIA,
+//       orden: item.orden != null ? item.orden : 9999,
+//       NombreFichero: item.NombreFichero,
+//     }));
+
+//     // 🕵️ Novedad: Comprobamos si se guardó bien en nuestro array
+//     console.log("🔍 PRODUCTO PROCESADO EN FRONTEND:", productos[0]);
+
+//     localStorage.setItem(cacheKey, JSON.stringify(productos));
+//     localStorage.setItem(cacheKey + "_time", Date.now().toString());
+//   } catch (error) {
+//     console.error("Error al cargar productos:", error);
+//   }
+// }
 
 // Obtener productos favoritos
 app.get("/api/favoritos", async (req, res) => {

@@ -1318,8 +1318,11 @@ body {
 }
 
 .productos-categoria-container {
-  max-height: 1000px;
-  overflow: hidden;
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+  display: flex;
+  flex-wrap: wrap;
   transition: max-height 0.3s ease;
 }
 
